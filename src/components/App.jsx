@@ -6,15 +6,15 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from "react"
    CONSTANTES
 --------------------------------------------------------------------- */
 const PROGRAMMES = {
-  mkd: { label: "Succession MKD", color: "#1F3A5C", tint: "#E7ECF2" },
-  serenity: { label: "Serenity SA", color: "#2E6350", tint: "#E5EEE9" },
-  mizzy: { label: "MIZZY & Co", color: "#A9752E", tint: "#F3EAD9" },
+  mkd: { label: "Succession MKD", color: "#1C2F66", tint: "#EAEDF9" },
+  serenity: { label: "Serenity SA", color: "#0F9D74", tint: "#E3F6EE" },
+  mizzy: { label: "MIZZY & Co", color: "#A9752E", tint: "#FBF1DE" },
 };
 
 const STATUTS = {
-  a_demarrer: { label: "À démarrer", color: "#1F3A5C" },
+  a_demarrer: { label: "À démarrer", color: "#1C2F66" },
   en_cours: { label: "En cours", color: "#A9752E" },
-  termine: { label: "Terminé", color: "#2E6350" },
+  termine: { label: "Terminé", color: "#0F9D74" },
 };
 
 function timeAgo(iso) {
@@ -542,7 +542,6 @@ function SwipeCard({ task, depth, interactive, onSwipe }) {
           <div className="pf-stamp pf-stamp-bronze pf-stamp-top" style={{ opacity: stampOpacity.up }}>BLOQUÉ</div>
         </>
       )}
-      <div className="pf-card-holes"><span /><span /><span /></div>
       <div className="pf-card-top" style={{ color: prog.color, background: prog.tint }}>
         <span className="pf-chip-prog">{prog.label}</span>
         <span className="pf-card-due">{formatDate(task.echeance)}</span>
@@ -793,118 +792,131 @@ function Style() {
   return (
     <style>{`
       :root {
-        --navy: #1F3A5C; --forest: #2E6350; --bronze: #A9752E;
-        --paper: #F1EADA; --paper-deep: #E7DCC2; --ink: #24211B; --ink-soft: #6b6153; --card: #FBF8F1;
+        --navy-deep: #0E1B3C; --navy: #1C2F66; --navy-soft: #4A5A93; --navy-tint: #EAEDF9;
+        --gold-deep: #A9752E; --gold: #D9A653; --gold-tint: #FBF1DE;
+        --emerald: #0F9D74; --emerald-tint: #E3F6EE;
+        --bg: #F5F6FB; --card: #FFFFFF; --border: #E3E6F0; --ink: #131A2E; --ink-soft: #5B6478;
+        --gradient-gold: linear-gradient(135deg, var(--gold) 0%, var(--gold-deep) 100%);
+        --gradient-navy: linear-gradient(165deg, var(--navy-deep), var(--navy) 130%);
+        --shadow-sm: 0 1px 2px rgba(19,26,46,0.06);
+        --shadow-md: 0 12px 28px rgba(19,26,46,0.10), 0 2px 6px rgba(19,26,46,0.06);
+        --shadow-lg: 0 20px 48px rgba(14,27,60,0.18);
       }
-      .pf-root { font-family: 'IBM Plex Sans', sans-serif; color: var(--ink); background: var(--paper);
-        background-image: radial-gradient(circle at 1px 1px, rgba(36,33,27,0.06) 1px, transparent 0);
-        background-size: 22px 22px; min-height: 100vh; width: 100%; display: flex; flex-direction: column; }
+      .pf-root { font-family: 'Instrument Sans', sans-serif; color: var(--ink); background: var(--bg);
+        background-image:
+          radial-gradient(circle at 100% 0%, rgba(217,166,83,0.10), transparent 45%),
+          radial-gradient(circle at 0% 100%, rgba(28,47,102,0.08), transparent 45%);
+        background-attachment: fixed; min-height: 100vh; width: 100%; display: flex; flex-direction: column; }
       .pf-root * { box-sizing: border-box; }
       .pf-center { align-items: center; justify-content: center; }
       .pf-loader { font-family: 'IBM Plex Mono', monospace; color: var(--ink-soft); letter-spacing: 0.06em; }
       .pf-mono { font-family: 'IBM Plex Mono', monospace; }
       .pf-login { max-width: 380px; padding: 40px 28px; text-align: center; }
-      .pf-login-eyebrow { font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.14em; color: var(--bronze); margin-bottom: 10px; }
-      .pf-login-title { font-family: 'Fraunces', serif; font-weight: 600; font-size: 34px; margin: 0 0 8px; }
+      .pf-login-eyebrow { font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.16em; color: var(--gold-deep); margin-bottom: 10px; font-weight: 600; }
+      .pf-login-title { font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 36px; letter-spacing: -0.01em; margin: 0 0 8px; color: var(--navy-deep); }
       .pf-login-sub { color: var(--ink-soft); font-size: 13px; margin-bottom: 26px; }
       .pf-login-form { display: flex; flex-direction: column; gap: 10px; text-align: left; }
       .pf-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-soft); margin: 10px 0 5px; display: block; font-weight: 600;}
-      .pf-input, .pf-select { width: 100%; padding: 10px 12px; border: 1.5px solid var(--paper-deep); border-radius: 6px; background: var(--card); font-family: inherit; font-size: 14px; color: var(--ink); outline: none; }
-      .pf-input:focus, .pf-select:focus { border-color: var(--navy); }
+      .pf-input, .pf-select { width: 100%; padding: 11px 13px; border: 1.5px solid var(--border); border-radius: 10px; background: var(--card); font-family: inherit; font-size: 14px; color: var(--ink); outline: none; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+      .pf-input:focus, .pf-select:focus { border-color: var(--navy); box-shadow: 0 0 0 3px var(--navy-tint); }
       .pf-select-full { width: 100%; }
       .pf-textarea { resize: vertical; }
       .pf-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-      .pf-btn { font-family: inherit; font-weight: 600; font-size: 13.5px; padding: 10px 18px; border-radius: 6px; border: 1.5px solid var(--navy); cursor: pointer; }
-      .pf-btn-primary { background: var(--navy); color: #fff; }
+      .pf-btn { font-family: inherit; font-weight: 700; font-size: 13.5px; padding: 11px 20px; border-radius: 10px; border: none; cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease; }
+      .pf-btn-primary { background: var(--navy); color: #fff; box-shadow: var(--shadow-sm); }
+      .pf-btn-primary:hover:not(:disabled) { box-shadow: var(--shadow-md); transform: translateY(-1px); }
       .pf-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
-      .pf-btn-outline { background: transparent; color: var(--navy); }
-      .pf-header { padding: 16px 18px 0; border-bottom: 2px solid var(--ink); background: var(--paper); position: sticky; top: 0; z-index: 30; }
+      .pf-btn-outline { background: var(--navy-tint); color: var(--navy); }
+      .pf-btn-outline:hover { background: var(--border); }
+      .pf-header { padding: 18px 18px 14px; background: var(--gradient-navy); position: sticky; top: 0; z-index: 30;
+        border-radius: 0 0 22px 22px; box-shadow: var(--shadow-lg); }
       .pf-header-top { display: flex; justify-content: space-between; align-items: flex-start; }
-      .pf-eyebrow { font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.14em; color: var(--bronze); }
-      .pf-title { font-family: 'Fraunces', serif; font-weight: 600; font-size: 21px; }
-      .pf-who { font-family: 'IBM Plex Mono', monospace; font-size: 12px; display: flex; align-items: center; gap: 6px; color: var(--ink-soft); background: none; border: none; cursor: pointer; padding: 4px; }
-      .pf-who-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--forest); display: inline-block; }
-      .pf-tabs { display: flex; gap: 4px; margin-top: 14px; overflow-x: auto; }
-      .pf-tab { font-family: inherit; font-size: 13px; font-weight: 600; background: none; border: none; padding: 9px 14px; color: var(--ink-soft); cursor: pointer; border-radius: 8px 8px 0 0; white-space: nowrap; }
-      .pf-tab.active { color: var(--ink); background: var(--card); }
-      .pf-tab-ghost { color: var(--bronze); margin-left: auto; }
-      .pf-badge { background: var(--bronze); color: #fff; border-radius: 10px; font-size: 10px; padding: 1px 6px; margin-left: 4px; }
-      .pf-main { flex: 1; overflow-y: auto; padding: 18px; padding-bottom: 90px; }
+      .pf-eyebrow { font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.16em; color: var(--gold); font-weight: 600; }
+      .pf-title { font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 21px; letter-spacing: -0.01em; color: #fff; }
+      .pf-who { font-family: 'IBM Plex Mono', monospace; font-size: 12px; display: flex; align-items: center; gap: 6px; color: rgba(255,255,255,0.75); background: none; border: none; cursor: pointer; padding: 4px; }
+      .pf-who-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); display: inline-block; }
+      .pf-tabs { display: flex; gap: 2px; margin-top: 16px; overflow-x: auto; background: rgba(255,255,255,0.08); border-radius: 999px; padding: 4px; }
+      .pf-tab { font-family: inherit; font-size: 13px; font-weight: 600; background: none; border: none; padding: 8px 16px; color: rgba(255,255,255,0.7); cursor: pointer; border-radius: 999px; white-space: nowrap; transition: background 0.15s ease, color 0.15s ease; }
+      .pf-tab.active { color: var(--navy-deep); background: #fff; font-weight: 700; }
+      .pf-tab-ghost { color: var(--gold); margin-left: auto; }
+      .pf-badge { background: var(--gold); color: var(--navy-deep); border-radius: 10px; font-size: 10px; font-weight: 700; padding: 1px 6px; margin-left: 4px; }
+      .pf-main { flex: 1; overflow-y: auto; padding: 20px 18px; padding-bottom: 90px; }
       .pf-deck-wrap { display: flex; flex-direction: column; align-items: center; }
       .pf-deck-controls { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
       .pf-scope { display: flex; gap: 6px; }
-      .pf-scope-btn { flex: 1; padding: 7px; border-radius: 6px; border: 1.5px solid var(--paper-deep); background: var(--card); font-family: inherit; font-weight: 600; font-size: 12.5px; cursor: pointer; color: var(--ink-soft); }
-      .pf-scope-btn.active { border-color: var(--ink); color: var(--ink); background: #fff; }
+      .pf-scope-btn { flex: 1; padding: 8px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--card); font-family: inherit; font-weight: 600; font-size: 12.5px; cursor: pointer; color: var(--ink-soft); transition: all 0.15s ease; }
+      .pf-scope-btn.active { border-color: var(--navy); color: var(--navy); background: var(--navy-tint); }
       .pf-legend { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--ink-soft); font-family: 'IBM Plex Mono', monospace; }
       .pf-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 3px; }
       .pf-stage { position: relative; width: 100%; max-width: 380px; height: 440px; }
-      .pf-card { position: absolute; inset: 0; background: var(--card); border-radius: 14px; border-top: 8px solid;
-        box-shadow: 0 10px 30px rgba(36,33,27,0.16), 0 2px 6px rgba(36,33,27,0.08);
+      .pf-card { position: absolute; inset: 0; background: var(--card); border-radius: 22px; border-top: 5px solid;
+        box-shadow: var(--shadow-md);
         display: flex; flex-direction: column; cursor: grab; touch-action: none; user-select: none; overflow: hidden; }
       .pf-card:active { cursor: grabbing; }
-      .pf-card-holes { position: absolute; top: 4px; left: 0; right: 0; display: flex; justify-content: center; gap: 60px; }
-      .pf-card-holes span { width: 8px; height: 8px; border-radius: 50%; background: var(--paper); box-shadow: inset 0 1px 2px rgba(0,0,0,0.25); }
-      .pf-card-top { display: flex; justify-content: space-between; align-items: center; padding: 16px 18px 10px; font-weight: 700; font-size: 12px; letter-spacing: 0.03em; }
+      .pf-card-top { display: flex; justify-content: space-between; align-items: center; padding: 18px 20px 12px; font-weight: 700; font-size: 12px; letter-spacing: 0.03em; }
+      .pf-chip-prog { text-transform: uppercase; letter-spacing: 0.04em; font-size: 11px; }
       .pf-card-due { font-family: 'IBM Plex Mono', monospace; font-weight: 600; }
-      .pf-card-body { flex: 1; padding: 14px 20px; display: flex; flex-direction: column; gap: 10px; }
+      .pf-card-body { flex: 1; padding: 12px 20px; display: flex; flex-direction: column; gap: 10px; }
       .pf-card-chantier { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); font-weight: 600; }
-      .pf-card-titre { font-family: 'Fraunces', serif; font-size: 23px; line-height: 1.25; font-weight: 500; }
-      .pf-card-notes { font-size: 13px; color: var(--ink-soft); border-left: 2px solid var(--paper-deep); padding-left: 10px; }
-      .pf-card-foot { padding: 14px 20px 18px; display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed var(--paper-deep); }
+      .pf-card-titre { font-family: 'Bricolage Grotesque', sans-serif; font-size: 24px; line-height: 1.25; font-weight: 700; letter-spacing: -0.01em; color: var(--navy-deep); }
+      .pf-card-notes { font-size: 13px; color: var(--ink-soft); border-left: 2px solid var(--border); padding-left: 10px; }
+      .pf-card-foot { padding: 14px 20px 20px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border); }
       .pf-status-pill { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 20px; color: #fff; }
-      .st-a_demarrer { background: var(--navy); } .st-en_cours { background: var(--bronze); } .st-termine { background: var(--forest); }
+      .st-a_demarrer { background: var(--navy); } .st-en_cours { background: var(--gold-deep); } .st-termine { background: var(--emerald); }
       .pf-card-assignee { font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: var(--ink-soft); }
-      .pf-stamp { position: absolute; top: 40%; font-family: 'Fraunces', serif; font-weight: 700; font-size: 30px;
-        border: 5px solid; border-radius: 10px; padding: 4px 14px; letter-spacing: 0.05em; pointer-events: none; z-index: 5; }
-      .pf-stamp-green { left: 24px; transform: rotate(-16deg); border-color: var(--forest); color: var(--forest); }
-      .pf-stamp-navy { right: 24px; transform: rotate(16deg); border-color: var(--navy); color: var(--navy); }
-      .pf-stamp-bronze.pf-stamp-top { left: 50%; top: 18%; transform: translateX(-50%) rotate(-6deg); border-color: var(--bronze); color: var(--bronze); }
-      .pf-swipe-buttons { display: flex; gap: 20px; margin-top: 22px; }
-      .pf-round { width: 54px; height: 54px; border-radius: 50%; border: none; font-size: 20px; font-weight: 700; cursor: pointer; color: #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.15); }
-      .pf-round-green { background: var(--forest); } .pf-round-bronze { background: var(--bronze); } .pf-round-navy { background: var(--navy); }
+      .pf-stamp { position: absolute; top: 40%; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 800; font-size: 26px;
+        border-radius: 14px; padding: 8px 18px; letter-spacing: 0.03em; pointer-events: none; z-index: 5; color: #fff; box-shadow: var(--shadow-lg); }
+      .pf-stamp-green { left: 24px; transform: rotate(-9deg); background: var(--emerald); }
+      .pf-stamp-navy { right: 24px; transform: rotate(9deg); background: var(--navy); }
+      .pf-stamp-bronze.pf-stamp-top { left: 50%; top: 18%; transform: translateX(-50%) rotate(-4deg); background: var(--gradient-gold); }
+      .pf-swipe-buttons { display: flex; gap: 20px; margin-top: 24px; }
+      .pf-round { width: 56px; height: 56px; border-radius: 50%; border: none; font-size: 20px; font-weight: 700; cursor: pointer; color: #fff; box-shadow: var(--shadow-md); transition: transform 0.15s ease; }
+      .pf-round:hover { transform: translateY(-2px); }
+      .pf-round-green { background: var(--emerald); } .pf-round-bronze { background: var(--gradient-gold); } .pf-round-navy { background: var(--navy); }
       .pf-empty { text-align: center; padding: 60px 20px; }
-      .pf-empty-mark { font-size: 34px; color: var(--forest); font-family: 'Fraunces', serif; }
-      .pf-empty-title { font-family: 'Fraunces', serif; font-size: 20px; font-weight: 600; margin: 6px 0; }
+      .pf-empty-mark { width: 56px; height: 56px; margin: 0 auto; border-radius: 50%; background: var(--gradient-gold); color: #fff; font-size: 26px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-md); }
+      .pf-empty-title { font-family: 'Bricolage Grotesque', sans-serif; font-size: 20px; font-weight: 700; margin: 14px 0 6px; color: var(--navy-deep); }
       .pf-empty-sub { color: var(--ink-soft); font-size: 13px; margin-bottom: 16px; }
       .pf-board-filters { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; align-items: center; justify-content: space-between; }
       .pf-chipset { display: flex; gap: 6px; flex-wrap: wrap; }
-      .pf-chip { font-family: inherit; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 20px; border: 1.5px solid; cursor: pointer; }
+      .pf-chip { font-family: inherit; font-size: 12px; font-weight: 700; padding: 7px 14px; border-radius: 20px; border: 1.5px solid; cursor: pointer; transition: all 0.15s ease; }
       .pf-columns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
       @media (max-width: 720px) { .pf-columns { grid-template-columns: 1fr; } }
-      .pf-col-head { display: flex; justify-content: space-between; font-weight: 700; font-size: 13px; padding-bottom: 8px; border-bottom: 2.5px solid; margin-bottom: 10px; }
+      .pf-col-head { display: flex; justify-content: space-between; font-weight: 700; font-size: 13px; padding-bottom: 10px; border-bottom: 3px solid; margin-bottom: 10px; border-radius: 2px; }
       .pf-col-count { font-family: 'IBM Plex Mono', monospace; color: var(--ink-soft); }
       .pf-col-body { display: flex; flex-direction: column; gap: 8px; min-height: 60px; }
       .pf-col-empty { font-size: 12px; color: var(--ink-soft); font-style: italic; padding: 10px 0; }
-      .pf-bcard { background: var(--card); border-radius: 8px; border-left: 4px solid; padding: 10px 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+      .pf-bcard { background: var(--card); border-radius: 12px; border-left: 4px solid; padding: 11px 13px; box-shadow: var(--shadow-sm); }
       .pf-bcard-head { display: flex; justify-content: space-between; gap: 8px; cursor: pointer; }
       .pf-bcard-chantier { font-size: 10px; text-transform: uppercase; color: var(--ink-soft); font-weight: 600; }
-      .pf-bcard-titre { font-family: 'Fraunces', serif; font-size: 15px; font-weight: 500; }
+      .pf-bcard-titre { font-family: 'Bricolage Grotesque', sans-serif; font-size: 15px; font-weight: 700; color: var(--navy-deep); }
       .pf-bcard-due { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-soft); white-space: nowrap; }
       .pf-bcard-meta { margin-top: 6px; font-size: 11px; color: var(--ink-soft); }
-      .pf-bcard-detail { margin-top: 10px; border-top: 1px dashed var(--paper-deep); padding-top: 10px; }
+      .pf-bcard-detail { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; }
       .pf-bcard-notes { font-size: 12.5px; color: var(--ink-soft); margin-bottom: 8px; }
       .pf-bcard-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
-      .pf-mini-btn { font-family: inherit; font-size: 11px; font-weight: 600; padding: 5px 9px; border-radius: 14px; border: 1.5px solid; cursor: pointer; }
+      .pf-mini-btn { font-family: inherit; font-size: 11px; font-weight: 700; padding: 5px 10px; border-radius: 14px; border: 1.5px solid; cursor: pointer; transition: all 0.15s ease; }
       .pf-bcard-history { font-size: 11px; color: var(--ink-soft); }
       .pf-hist-row { padding: 2px 0; }
       .pf-hist-created { font-style: italic; opacity: 0.8; }
       .pf-notifs { max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; gap: 8px; }
-      .pf-notif { display: flex; gap: 10px; background: var(--card); border-radius: 8px; padding: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-      .pf-notif.unread { border-left: 3px solid var(--bronze); }
+      .pf-notif { display: flex; gap: 10px; background: var(--card); border-radius: 12px; padding: 13px; box-shadow: var(--shadow-sm); }
+      .pf-notif.unread { border-left: 3px solid var(--gold-deep); }
       .pf-notif-icon { font-size: 16px; }
       .pf-notif-msg { font-size: 13.5px; }
       .pf-notif-time { font-size: 10.5px; color: var(--ink-soft); margin-top: 3px; }
-      .pf-fab { position: fixed; bottom: 22px; right: 22px; width: 54px; height: 54px; border-radius: 50%; background: var(--ink); color: #fff; font-size: 26px; border: none; box-shadow: 0 6px 16px rgba(0,0,0,0.25); cursor: pointer; z-index: 40; }
-      .pf-modal-backdrop { position: fixed; inset: 0; background: rgba(36,33,27,0.5); display: flex; align-items: flex-end; justify-content: center; z-index: 50; }
+      .pf-fab { position: fixed; bottom: 22px; right: 22px; width: 56px; height: 56px; border-radius: 50%; background: var(--gradient-gold); color: #fff; font-size: 26px; border: none; box-shadow: var(--shadow-lg); cursor: pointer; z-index: 40; transition: transform 0.15s ease; }
+      .pf-fab:hover { transform: scale(1.06); }
+      .pf-modal-backdrop { position: fixed; inset: 0; background: rgba(14,27,60,0.45); display: flex; align-items: flex-end; justify-content: center; z-index: 50; }
       @media (min-width: 640px) { .pf-modal-backdrop { align-items: center; } }
-      .pf-modal { background: var(--paper); width: 100%; max-width: 440px; border-radius: 16px 16px 0 0; padding: 22px 22px 26px; max-height: 88vh; overflow-y: auto; }
-      @media (min-width: 640px) { .pf-modal { border-radius: 14px; } }
-      .pf-modal-eyebrow { font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.12em; color: var(--bronze); }
-      .pf-modal-title { font-family: 'Fraunces', serif; font-size: 22px; margin: 4px 0 10px; }
+      .pf-modal { background: var(--bg); width: 100%; max-width: 440px; border-radius: 20px 20px 0 0; padding: 22px 22px 26px; max-height: 88vh; overflow-y: auto; box-shadow: var(--shadow-lg); }
+      @media (min-width: 640px) { .pf-modal { border-radius: 18px; } }
+      .pf-modal-eyebrow { font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.12em; color: var(--gold-deep); font-weight: 600; }
+      .pf-modal-title { font-family: 'Bricolage Grotesque', sans-serif; font-size: 23px; font-weight: 700; margin: 4px 0 10px; color: var(--navy-deep); }
       .pf-radio-row { display: flex; flex-wrap: wrap; gap: 6px; }
-      .pf-radio { font-family: inherit; font-size: 12px; font-weight: 600; padding: 7px 12px; border-radius: 20px; border: 1.5px solid; cursor: pointer; }
+      .pf-radio { font-family: inherit; font-size: 12px; font-weight: 700; padding: 8px 14px; border-radius: 20px; border: 1.5px solid; cursor: pointer; transition: all 0.15s ease; }
       .pf-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
-      .pf-toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 20px; font-size: 13px; z-index: 60; box-shadow: 0 6px 16px rgba(0,0,0,0.25); }
+      .pf-toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: var(--navy-deep); color: #fff; padding: 11px 20px; border-radius: 20px; font-size: 13px; z-index: 60; box-shadow: var(--shadow-lg); }
     `}</style>
   );
 }
