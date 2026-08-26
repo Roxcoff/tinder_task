@@ -2,15 +2,14 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// Ce projet est pensé pour la base "Postgres" gratuite proposée dans l'onglet
-// Storage de Vercel (elle est en réalité hébergée chez Neon). Vercel injecte
-// automatiquement POSTGRES_PRISMA_URL (connexion mise en pool, pour l'app en
-// prod) et POSTGRES_URL_NON_POOLING (connexion directe, nécessaire pour les
-// migrations Prisma).
+// Ce projet est pensé pour une base Postgres provisionnée via l'onglet
+// Storage de Vercel. Selon le fournisseur choisi, les noms de variables
+// injectées varient — avec "Prisma Postgres", Vercel fournit POSTGRES_URL
+// (connexion directe standard, utilisée ici à la fois pour l'app et les
+// migrations).
 datasource db {
-  provider  = "postgresql"
-  url       = env("POSTGRES_PRISMA_URL")
-  directUrl = env("POSTGRES_URL_NON_POOLING")
+  provider = "postgresql"
+  url      = env("POSTGRES_URL")
 }
 
 enum Programme {

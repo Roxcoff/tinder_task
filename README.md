@@ -12,8 +12,8 @@ cp .env.example .env
 
 Pour développer en local, le plus simple est d'utiliser **directement la base Vercel** (voir étape 3
 ci-dessous) : une fois le projet lié avec `vercel link`, faites `vercel env pull .env.local` pour récupérer
-automatiquement `POSTGRES_PRISMA_URL` et `POSTGRES_URL_NON_POOLING`. Sinon, mettez l'URL d'une base Postgres
-gratuite (Neon, Supabase...) dans les deux variables de `.env`.
+automatiquement `POSTGRES_URL`. Sinon, mettez l'URL d'une base Postgres gratuite (Neon, Supabase...) dans
+cette variable de `.env`.
 
 ```bash
 npx prisma migrate dev --name init   # crée les tables, à faire une seule fois — lance aussi le seed automatiquement
@@ -41,11 +41,14 @@ gh repo create le-tri-des-taches --private --source=. --remote=origin --push
 ## 3. Déployer sur Vercel avec une base Postgres gratuite
 
 1. Allez sur **vercel.com** → *Add New… → Project* → importez le repo GitHub que vous venez de créer.
+   Vérifiez que **Framework Preset** est bien détecté sur **Next.js** (pas "Other") — sinon les routes
+   API ne fonctionneront pas.
 2. Ne déployez pas encore, ou laissez le premier déploiement échouer (normal, la base n'existe pas encore) —
-   allez dans l'onglet **Storage** du projet Vercel → *Create Database* → choisissez **Postgres** (gratuit,
-   plan *Hobby*, hébergé par Neon). Connectez-la au projet.
-3. Vercel ajoute automatiquement les variables `POSTGRES_PRISMA_URL` et `POSTGRES_URL_NON_POOLING` — c'est
-   exactement ce que `prisma/schema.prisma` attend, rien à faire de plus ici.
+   allez dans l'onglet **Storage** du projet Vercel → *Create Database* → choisissez une offre **Postgres**
+   (ex. **Prisma Postgres**, gratuite). Connectez-la au projet.
+3. Vercel ajoute automatiquement une variable `POSTGRES_URL` — c'est exactement ce que `prisma/schema.prisma`
+   attend, rien à faire de plus ici. (Si votre fournisseur injecte d'autres noms de variables, adaptez
+   `env(...)` dans `prisma/schema.prisma` en conséquence.)
 4. Toujours dans **Settings → Environment Variables**, ajoutez :
    - `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (générées avec `npx web-push generate-vapid-keys`)
    - `VAPID_SUBJECT` (ex. `mailto:vous@exemple.com`)
@@ -53,7 +56,7 @@ gh repo create le-tri-des-taches --private --source=. --remote=origin --push
    - `ACCESS_CODE` (optionnel — laissez vide si vous ne voulez pas de code d'équipe)
 5. Dans **Settings → General → Build & Development Settings**, changez la commande de build pour :
    ```
-   prisma migrate deploy && next build
+   prisma generate && prisma migrate deploy && next build
    ```
    (ça applique les migrations sur la base de prod à chaque déploiement — pratique pour une petite équipe).
 6. Relancez un déploiement (*Deployments → Redeploy*). L'app est en ligne sur `https://<projet>.vercel.app`.
