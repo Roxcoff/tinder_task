@@ -1,0 +1,26 @@
+{
+  "name": "le-tri-des-taches",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "postinstall": "prisma generate",
+    "migrate:dev": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy"
+  },
+  "dependencies": {
+    "next": "^14.2.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "@prisma/client": "^5.18.0",
+    "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "prisma": "^5.18.0"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
+  }
+}

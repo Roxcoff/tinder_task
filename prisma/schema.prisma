@@ -1,0 +1,96 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Ce projet est pensé pour la base "Postgres" gratuite proposée dans l'onglet
+// Storage de Vercel (elle est en réalité hébergée chez Neon). Vercel injecte
+// automatiquement POSTGRES_PRISMA_URL (connexion mise en pool, pour l'app en
+// prod) et POSTGRES_URL_NON_POOLING (connexion directe, nécessaire pour les
+// migrations Prisma).
+datasource db {
+  provider  = "postgresql"
+  url       = env("POSTGRES_PRISMA_URL")
+  directUrl = env("POSTGRES_URL_NON_POOLING")
+}
+
+enum Programme {
+  mkd
+  serenity
+  mizzy
+}
+
+enum Statut {
+  a_demarrer
+  en_cours
+  termine
+}
+
+enum NotificationType {
+  assignation
+  statut
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  tasksCreated      Task[]             @relation("createdBy")
+  tasksAssigned     Task[]             @relation("assignee")
+  events            TaskEvent[]
+  pushSubscriptions PushSubscription[]
+  notificationsSent Notification[]     @relation("from")
+  notificationsRecv Notification[]     @relation("to")
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+}
+
+model Task {
+  id          String    @id @default(cuid())
+  programme   Programme
+  chantier    String
+  titre       String
+  echeance    DateTime?
+  statut      Statut    @default(a_demarrer)
+  notes       String?
+  assigneeId  String?
+  assignee    User?     @relation("assignee", fields: [assigneeId], references: [id])
+  createdById String
+  createdBy   User      @relation("createdBy", fields: [createdById], references: [id])
+  createdAt   DateTime  @default(now())
+
+  events        TaskEvent[]
+  notifications Notification[]
+}
+
+model TaskEvent {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  statut    Statut
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id         String           @id @default(cuid())
+  type       NotificationType
+  message    String
+  taskId     String?
+  task       Task?            @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  toUserId   String
+  toUser     User             @relation("to", fields: [toUserId], references: [id])
+  fromUserId String
+  fromUser   User             @relation("from", fields: [fromUserId], references: [id])
+  createdAt  DateTime         @default(now())
+  readAt     DateTime?
+}
