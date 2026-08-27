@@ -684,7 +684,17 @@ function SwipeCard({ task, depth, interactive, locked, onSwipe, onBlockRequest, 
                 value={commentText}
                 onChange={(e) => setCommentText(e.target.value)}
               />
-              <button className="pf-btn pf-btn-outline pf-btn-sm" type="submit" disabled={!commentText.trim()}>
+              <button
+                type="button"
+                className="pf-btn pf-btn-outline pf-btn-sm"
+                onClick={() => {
+                  setShowComment(false);
+                  setCommentText("");
+                }}
+              >
+                Annuler
+              </button>
+              <button className="pf-btn pf-btn-primary pf-btn-sm" type="submit" disabled={!commentText.trim()}>
                 Envoyer
               </button>
             </form>
@@ -900,6 +910,9 @@ function KpiView({ tasks }) {
 
   return (
     <div className="pf-kpi">
+      <a className="pf-btn pf-btn-primary pf-kpi-export" href="/api/export/xlsx">
+        ⬇ Exporter en Excel
+      </a>
       <div className="pf-kpi-summary">
         <div className="pf-kpi-tile">
           <div className="pf-kpi-value">{total}</div>
