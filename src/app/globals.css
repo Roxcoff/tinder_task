@@ -15,6 +15,7 @@ body {
         --navy-deep: #0E1B3C; --navy: #1C2F66; --navy-soft: #4A5A93; --navy-tint: #EAEDF9;
         --gold-deep: #A9752E; --gold: #D9A653; --gold-tint: #FBF1DE;
         --emerald: #0F9D74; --emerald-tint: #E3F6EE;
+        --red: #C6402E; --red-tint: #FBEAE7;
         --bg: #F5F6FB; --card: #FFFFFF; --border: #E3E6F0; --ink: #131A2E; --ink-soft: #5B6478;
         --gradient-gold: linear-gradient(135deg, var(--gold) 0%, var(--gold-deep) 100%);
         --gradient-navy: linear-gradient(165deg, var(--navy-deep), var(--navy) 130%);
@@ -137,3 +138,25 @@ body {
       .pf-radio { font-family: inherit; font-size: 12px; font-weight: 700; padding: 8px 14px; border-radius: 20px; border: 1.5px solid; cursor: pointer; transition: all 0.15s ease; }
       .pf-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
       .pf-toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: var(--navy-deep); color: #fff; padding: 11px 20px; border-radius: 20px; font-size: 13px; z-index: 60; box-shadow: var(--shadow-lg); }
+      .pf-chip-private { font-family: "IBM Plex Mono", monospace; font-size: 10px; font-weight: 700; letter-spacing: 0.03em; }
+      .pf-chip-private-sm { display: inline-block; margin-left: 8px; font-size: 9.5px; color: var(--ink-soft); vertical-align: middle; }
+      .pf-due { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 8px 12px; border-radius: 10px; align-self: flex-start; }
+      .pf-due-label { font-family: "IBM Plex Mono", monospace; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+      .pf-due-date { font-family: "Bricolage Grotesque", sans-serif; font-size: 16px; font-weight: 700; }
+      .pf-due-normal { background: var(--navy-tint); color: var(--navy); }
+      .pf-due-soon { background: var(--gold-tint); color: var(--gold-deep); }
+      .pf-due-overdue { background: var(--red-tint); color: var(--red); }
+      .pf-card-started { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--ink-soft); }
+      .pf-card-foot-right { display: flex; align-items: center; gap: 10px; }
+      .pf-card-comments { font-size: 11.5px; color: var(--ink-soft); font-family: "IBM Plex Mono", monospace; }
+      .pf-bcard-started { font-family: "IBM Plex Mono", monospace; }
+      .pf-bcard-head { align-items: flex-start; }
+      .pf-bcard-meta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+      .pf-comments { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+      .pf-comment { background: var(--bg); border-radius: 10px; padding: 8px 10px; }
+      .pf-comment-meta { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--ink-soft); margin-bottom: 3px; }
+      .pf-comment-author { font-weight: 700; color: var(--ink); }
+      .pf-comment-text { font-size: 12.5px; }
+      .pf-comment-form { display: flex; gap: 6px; margin-top: 2px; }
+      .pf-comment-form .pf-input { flex: 1; }
+      .pf-btn-sm { padding: 8px 14px; font-size: 12px; white-space: nowrap; }

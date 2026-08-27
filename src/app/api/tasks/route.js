@@ -4,6 +4,13 @@ import { getSessionUserId } from "@/lib/session";
 import { sendPushToUser } from "@/lib/push";
 
 function serialize(task) {
+  const historique = (task.events || []).map((e) => ({
+    statut: e.statut,
+    par: e.user?.name || "",
+    le: e.createdAt.toISOString(),
+  }));
+  const demarree = historique.find((h) => h.statut === "en_cours");
+
   return {
     id: task.id,
     programme: task.programme,
@@ -12,13 +19,16 @@ function serialize(task) {
     echeance: task.echeance ? task.echeance.toISOString().slice(0, 10) : "",
     statut: task.statut,
     notes: task.notes || "",
+    personnelle: task.personnelle,
     assignee: task.assignee?.name || null,
     creePar: task.createdBy?.name || "",
     creeLe: task.createdAt.toISOString(),
-    historique: (task.events || []).map((e) => ({
-      statut: e.statut,
-      par: e.user?.name || "",
-      le: e.createdAt.toISOString(),
+    demarreeLe: demarree ? demarree.le : null,
+    historique,
+    commentaires: (task.comments || []).map((c) => ({
+      texte: c.texte,
+      par: c.user?.name || "",
+      le: c.createdAt.toISOString(),
     })),
   };
 }
@@ -28,10 +38,12 @@ export async function GET() {
   if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const tasks = await prisma.task.findMany({
+    where: { OR: [{ personnelle: false }, { createdById: userId }] },
     include: {
       assignee: true,
       createdBy: true,
       events: { include: { user: true }, orderBy: { createdAt: "asc" } },
+      comments: { include: { user: true }, orderBy: { createdAt: "asc" } },
     },
     orderBy: { createdAt: "asc" },
   });
@@ -70,6 +82,7 @@ export async function POST(req) {
       titre: body.titre.trim(),
       echeance: body.echeance ? new Date(body.echeance) : null,
       notes: body.notes || "",
+      personnelle: !!body.personnelle,
       assigneeId: assignee?.id,
       createdById: actor.id,
       events: { create: { statut: "a_demarrer", userId: actor.id } },
@@ -78,6 +91,7 @@ export async function POST(req) {
       assignee: true,
       createdBy: true,
       events: { include: { user: true } },
+      comments: { include: { user: true } },
     },
   });
 

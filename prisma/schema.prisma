@@ -37,6 +37,7 @@ model User {
   tasksCreated      Task[]             @relation("createdBy")
   tasksAssigned     Task[]             @relation("assignee")
   events            TaskEvent[]
+  comments          Comment[]
   pushSubscriptions PushSubscription[]
   notificationsSent Notification[]     @relation("from")
   notificationsRecv Notification[]     @relation("to")
@@ -60,6 +61,7 @@ model Task {
   echeance    DateTime?
   statut      Statut    @default(a_demarrer)
   notes       String?
+  personnelle Boolean   @default(false)
   assigneeId  String?
   assignee    User?     @relation("assignee", fields: [assigneeId], references: [id])
   createdById String
@@ -67,7 +69,18 @@ model Task {
   createdAt   DateTime  @default(now())
 
   events        TaskEvent[]
+  comments      Comment[]
   notifications Notification[]
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  texte     String
+  createdAt DateTime @default(now())
 }
 
 model TaskEvent {

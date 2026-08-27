@@ -29,6 +29,34 @@ function formatDate(iso) {
   const d = new Date(iso + "T00:00:00");
   return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" });
 }
+function formatDateLong(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
+}
+function dueUrgency(echeance, statut) {
+  if (!echeance || statut === "termine") return "none";
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(echeance + "T00:00:00");
+  const diffDays = Math.round((due - today) / 86400000);
+  if (diffDays < 0) return "overdue";
+  if (diffDays <= 3) return "soon";
+  return "normal";
+}
+
+const URGENCY_LABEL = { overdue: "En retard", soon: "Bientôt", normal: "Échéance" };
+
+function DueBlock({ echeance, statut }) {
+  if (!echeance) return null;
+  const urgency = dueUrgency(echeance, statut);
+  return (
+    <div className={"pf-due pf-due-" + urgency}>
+      <span className="pf-due-label">{URGENCY_LABEL[urgency] || "Échéance"}</span>
+      <span className="pf-due-date">{formatDate(echeance)}</span>
+    </div>
+  );
+}
 
 /* ---------------------------------------------------------------------
    COUCHE API
@@ -230,6 +258,20 @@ export default function App() {
     }
   }
 
+  async function addComment(taskId, texte) {
+    try {
+      const { commentaire } = await api(`/api/tasks/${taskId}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ texte }),
+      });
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, commentaires: [...(t.commentaires || []), commentaire] } : t))
+      );
+    } catch (e) {
+      showToast(e.message || "Échec de l'envoi du commentaire");
+    }
+  }
+
   async function markAllRead() {
     setNotifs((prev) => prev.map((n) => ({ ...n, lu: true })));
     await api("/api/notifications/read", { method: "POST" }).catch(() => {});
@@ -289,6 +331,7 @@ export default function App() {
             tasks={tasks}
             collaborators={collaborators}
             onStatusChange={(id, s) => updateStatus(id, s)}
+            onAddComment={addComment}
           />
         )}
         {view === "notifs" && <NotifsView notifs={notifs} onOpen={markAllRead} />}
@@ -543,16 +586,21 @@ function SwipeCard({ task, depth, interactive, onSwipe }) {
       )}
       <div className="pf-card-top" style={{ color: prog.color, background: prog.tint }}>
         <span className="pf-chip-prog">{prog.label}</span>
-        <span className="pf-card-due">{formatDate(task.echeance)}</span>
+        {task.personnelle && <span className="pf-chip-private">🔒 Personnelle</span>}
       </div>
       <div className="pf-card-body">
         <div className="pf-card-chantier">{task.chantier}</div>
         <div className="pf-card-titre">{task.titre}</div>
         {task.notes && <div className="pf-card-notes">{task.notes}</div>}
+        <DueBlock echeance={task.echeance} statut={task.statut} />
+        {task.demarreeLe && <div className="pf-card-started">Démarrée le {formatDateLong(task.demarreeLe)}</div>}
       </div>
       <div className="pf-card-foot">
         <span className={"pf-status-pill st-" + task.statut}>{STATUTS[task.statut].label}</span>
-        <span className="pf-card-assignee">{task.assignee ? `→ ${task.assignee}` : "Non assignée"}</span>
+        <span className="pf-card-foot-right">
+          <span className="pf-card-assignee">{task.assignee ? `→ ${task.assignee}` : "Non assignée"}</span>
+          {task.commentaires?.length > 0 && <span className="pf-card-comments">💬 {task.commentaires.length}</span>}
+        </span>
       </div>
     </div>
   );
@@ -561,7 +609,7 @@ function SwipeCard({ task, depth, interactive, onSwipe }) {
 /* ---------------------------------------------------------------------
    BOARD VIEW
 --------------------------------------------------------------------- */
-function BoardView({ tasks, collaborators, onStatusChange }) {
+function BoardView({ tasks, collaborators, onStatusChange, onAddComment }) {
   const [progFilter, setProgFilter] = useState(new Set(Object.keys(PROGRAMMES)));
   const [assigneeFilter, setAssigneeFilter] = useState("Tous");
   const [openId, setOpenId] = useState(null);
@@ -612,7 +660,14 @@ function BoardView({ tasks, collaborators, onStatusChange }) {
               <div className="pf-col-body">
                 {items.length === 0 && <div className="pf-col-empty">Rien ici</div>}
                 {items.map((t) => (
-                  <BoardCard key={t.id} task={t} open={openId === t.id} onToggle={() => setOpenId(openId === t.id ? null : t.id)} onStatusChange={onStatusChange} />
+                  <BoardCard
+                    key={t.id}
+                    task={t}
+                    open={openId === t.id}
+                    onToggle={() => setOpenId(openId === t.id ? null : t.id)}
+                    onStatusChange={onStatusChange}
+                    onAddComment={onAddComment}
+                  />
                 ))}
               </div>
             </div>
@@ -623,19 +678,34 @@ function BoardView({ tasks, collaborators, onStatusChange }) {
   );
 }
 
-function BoardCard({ task, open, onToggle, onStatusChange }) {
+function BoardCard({ task, open, onToggle, onStatusChange, onAddComment }) {
   const prog = PROGRAMMES[task.programme];
+  const [commentText, setCommentText] = useState("");
+
+  const submitComment = (e) => {
+    e.preventDefault();
+    const texte = commentText.trim();
+    if (!texte) return;
+    onAddComment(task.id, texte);
+    setCommentText("");
+  };
+
   return (
     <div className="pf-bcard" style={{ borderLeftColor: prog.color }}>
       <div className="pf-bcard-head" onClick={onToggle}>
         <div>
-          <div className="pf-bcard-chantier">{task.chantier}</div>
+          <div className="pf-bcard-chantier">
+            {task.chantier}
+            {task.personnelle && <span className="pf-chip-private pf-chip-private-sm">🔒 Personnelle</span>}
+          </div>
           <div className="pf-bcard-titre">{task.titre}</div>
         </div>
-        <div className="pf-bcard-due">{formatDate(task.echeance)}</div>
+        <DueBlock echeance={task.echeance} statut={task.statut} />
       </div>
       <div className="pf-bcard-meta">
         <span className="pf-mono">{task.assignee || "non assignée"}</span>
+        {task.demarreeLe && <span className="pf-bcard-started">Démarrée le {formatDate(task.demarreeLe.slice(0, 10))}</span>}
+        {task.commentaires?.length > 0 && <span className="pf-card-comments">💬 {task.commentaires.length}</span>}
       </div>
       {open && (
         <div className="pf-bcard-detail">
@@ -659,6 +729,28 @@ function BoardCard({ task, open, onToggle, onStatusChange }) {
               </div>
             ))}
             <div className="pf-hist-row pf-hist-created">créée par {task.creePar} · {timeAgo(task.creeLe)}</div>
+          </div>
+          <div className="pf-comments">
+            {(task.commentaires || []).map((c, i) => (
+              <div key={i} className="pf-comment">
+                <div className="pf-comment-meta">
+                  <span className="pf-comment-author">{c.par}</span>
+                  <span className="pf-mono">{timeAgo(c.le)}</span>
+                </div>
+                <div className="pf-comment-text">{c.texte}</div>
+              </div>
+            ))}
+            <form className="pf-comment-form" onSubmit={submitComment}>
+              <input
+                className="pf-input"
+                placeholder="Ajouter un commentaire (ex. raison du blocage)…"
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+              />
+              <button className="pf-btn pf-btn-outline pf-btn-sm" type="submit" disabled={!commentText.trim()}>
+                Publier
+              </button>
+            </form>
           </div>
         </div>
       )}
@@ -703,7 +795,7 @@ function NotifsView({ notifs, onOpen }) {
    ADD TASK MODAL
 --------------------------------------------------------------------- */
 function AddTaskModal({ collaborators, onClose, onSubmit }) {
-  const [form, setForm] = useState({ titre: "", programme: "mkd", chantier: "", echeance: "", assignee: "", notes: "" });
+  const [form, setForm] = useState({ titre: "", programme: "mkd", chantier: "", echeance: "", assignee: "", notes: "", personnelle: false });
   const [addingPerson, setAddingPerson] = useState(false);
   const [newPerson, setNewPerson] = useState("");
 
@@ -769,6 +861,26 @@ function AddTaskModal({ collaborators, onClose, onSubmit }) {
 
           <label className="pf-label">Notes (optionnel)</label>
           <textarea className="pf-input pf-textarea" value={form.notes} onChange={set("notes")} rows={2} />
+
+          <label className="pf-label">Visibilité</label>
+          <div className="pf-radio-row">
+            <button
+              type="button"
+              className={"pf-radio" + (!form.personnelle ? " active" : "")}
+              style={{ borderColor: "var(--navy)", background: !form.personnelle ? "var(--navy)" : "transparent", color: !form.personnelle ? "#fff" : "var(--navy)" }}
+              onClick={() => setForm((f) => ({ ...f, personnelle: false }))}
+            >
+              Collective — visible de l'équipe
+            </button>
+            <button
+              type="button"
+              className={"pf-radio" + (form.personnelle ? " active" : "")}
+              style={{ borderColor: "var(--navy)", background: form.personnelle ? "var(--navy)" : "transparent", color: form.personnelle ? "#fff" : "var(--navy)" }}
+              onClick={() => setForm((f) => ({ ...f, personnelle: true }))}
+            >
+              🔒 Personnelle — visible de vous seul(e)
+            </button>
+          </div>
 
           <div className="pf-modal-actions">
             <button type="button" className="pf-btn pf-btn-outline" onClick={onClose}>
