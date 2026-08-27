@@ -101,5 +101,12 @@ export async function GET(req) {
     created = task.titre;
   }
 
-  return NextResponse.json({ updated, notFound, created: created || "déjà présente" });
+  const dbSample = await prisma.task.findMany({
+    where: { programme: "mkd" },
+    select: { titre: true },
+    take: 3,
+  });
+  const bytes = dbSample[0] ? Buffer.from(dbSample[0].titre, "utf8").toString("hex") : null;
+
+  return NextResponse.json({ updated, notFound, created: created || "déjà présente", dbSample, bytes });
 }
