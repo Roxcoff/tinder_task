@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUserId } from "@/lib/session";
+import { isAdminName } from "@/lib/admin";
 
 export async function GET() {
   const userId = getSessionUserId();
@@ -9,5 +10,5 @@ export async function GET() {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) return NextResponse.json({ user: null }, { status: 401 });
 
-  return NextResponse.json({ user: { id: user.id, name: user.name } });
+  return NextResponse.json({ user: { id: user.id, name: user.name, isAdmin: isAdminName(user.name) } });
 }

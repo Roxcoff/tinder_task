@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { setSessionCookie } from "@/lib/session";
+import { isAdminName } from "@/lib/admin";
 
 export async function POST(req) {
   const body = await req.json().catch(() => ({}));
@@ -21,5 +22,5 @@ export async function POST(req) {
   });
 
   setSessionCookie(user.id);
-  return NextResponse.json({ user: { id: user.id, name: user.name } });
+  return NextResponse.json({ user: { id: user.id, name: user.name, isAdmin: isAdminName(user.name) } });
 }

@@ -132,6 +132,7 @@ export default function App() {
   const [showAdd, setShowAdd] = useState(false);
   const [toast, setToast] = useState(null);
   const [notifPermission, setNotifPermission] = useState("unsupported");
+  const [blockPrompt, setBlockPrompt] = useState(null);
 
   useEffect(() => {
     if (typeof Notification !== "undefined") setNotifPermission(Notification.permission);
@@ -225,12 +226,18 @@ export default function App() {
     setNotifs([]);
   }
 
-  async function updateStatus(taskId, statut) {
+  async function updateStatus(taskId, statut, commentaire) {
     setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, statut } : t)));
     try {
-      await api(`/api/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify({ statut }) });
+      await api(`/api/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify({ statut, commentaire }) });
+      if (commentaire) {
+        const mine = { texte: commentaire, par: profile.name, le: new Date().toISOString() };
+        setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, commentaires: [...(t.commentaires || []), mine] } : t)));
+      }
+      return true;
     } catch (e) {
-      showToast("Échec de la mise à jour");
+      showToast(e.message || "Échec de la mise à jour");
+      return false;
     }
   }
 
@@ -238,10 +245,21 @@ export default function App() {
     setQueue((q) => q.filter((id) => id !== taskId));
   }
 
-  async function handleSwipe(taskId, direction) {
+  async function handleSwipe(taskId, direction, commentaire) {
     const statut = direction === "left" ? "termine" : direction === "up" ? "en_cours" : "a_demarrer";
-    await updateStatus(taskId, statut);
-    advanceQueue(taskId);
+    const ok = await updateStatus(taskId, statut, commentaire);
+    if (ok) advanceQueue(taskId);
+  }
+
+  async function reassignTask(taskId, assignee) {
+    try {
+      await api(`/api/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify({ assignee }) });
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, assignee: assignee || null } : t)));
+      if (assignee && !collaborators.includes(assignee)) setCollaborators((c) => [...c, assignee]);
+      showToast(assignee ? `Assignée à ${assignee}` : "Tâche désassignée");
+    } catch (e) {
+      showToast(e.message || "Échec de l'assignation");
+    }
   }
 
   async function addTask(form) {
@@ -299,6 +317,7 @@ export default function App() {
   }
 
   const unread = notifs.filter((n) => !n.lu).length;
+  const canAct = (task) => profile.isAdmin || !task.assignee || task.assignee === profile.name;
 
   return (
     <div className="pf-root">
@@ -320,6 +339,10 @@ export default function App() {
             deckScope={deckScope}
             setDeckScope={setDeckScope}
             onSwipe={handleSwipe}
+            onSkip={advanceQueue}
+            onAddComment={addComment}
+            onBlockRequest={(taskId) => setBlockPrompt({ taskId })}
+            canAct={canAct}
             onReset={() => {
               const base = tasks.filter((t) => (deckScope === "mine" ? t.assignee === profile.name : true));
               setQueue(base.map((t) => t.id));
@@ -330,16 +353,31 @@ export default function App() {
           <BoardView
             tasks={tasks}
             collaborators={collaborators}
-            onStatusChange={(id, s) => updateStatus(id, s)}
+            profile={profile}
+            canAct={canAct}
+            onStatusChange={(id, s) => (s === "en_cours" ? setBlockPrompt({ taskId: id }) : updateStatus(id, s))}
             onAddComment={addComment}
+            onReassign={reassignTask}
           />
         )}
+        {view === "kpi" && <KpiView tasks={tasks} />}
         {view === "notifs" && <NotifsView notifs={notifs} onOpen={markAllRead} />}
       </main>
 
       <button className="pf-fab" onClick={() => setShowAdd(true)} aria-label="Ajouter une tâche">
         +
       </button>
+
+      {blockPrompt && (
+        <BlockReasonModal
+          onClose={() => setBlockPrompt(null)}
+          onSubmit={async (commentaire) => {
+            const ok = await updateStatus(blockPrompt.taskId, "en_cours", commentaire);
+            if (ok) advanceQueue(blockPrompt.taskId);
+            setBlockPrompt(null);
+          }}
+        />
+      )}
 
       {showAdd && (
         <AddTaskModal collaborators={collaborators} onClose={() => setShowAdd(false)} onSubmit={addTask} />
@@ -421,6 +459,9 @@ function Header({ profile, view, setView, unread, onLogout, notifPermission, req
         <button className={"pf-tab" + (view === "board" ? " active" : "")} onClick={() => setView("board")}>
           Tableau
         </button>
+        <button className={"pf-tab" + (view === "kpi" ? " active" : "")} onClick={() => setView("kpi")}>
+          Suivi
+        </button>
         <button className={"pf-tab" + (view === "notifs" ? " active" : "")} onClick={() => setView("notifs")}>
           Alertes {unread > 0 && <span className="pf-badge">{unread}</span>}
         </button>
@@ -437,11 +478,14 @@ function Header({ profile, view, setView, unread, onLogout, notifPermission, req
 /* ---------------------------------------------------------------------
    DECK VIEW
 --------------------------------------------------------------------- */
-function DeckView({ queue, taskById, deckScope, setDeckScope, onSwipe, onReset }) {
+function DeckView({ queue, taskById, deckScope, setDeckScope, onSwipe, onSkip, onAddComment, onBlockRequest, canAct, onReset }) {
   const visible = queue
     .slice(0, 3)
     .map((id) => taskById[id])
     .filter(Boolean);
+
+  const top = visible[0];
+  const locked = top ? !canAct(top) : false;
 
   return (
     <div className="pf-deck-wrap">
@@ -482,37 +526,56 @@ function DeckView({ queue, taskById, deckScope, setDeckScope, onSwipe, onReset }
             .map((t, i) => {
               const depth = visible.length - 1 - i;
               return (
-                <SwipeCard key={t.id} task={t} depth={depth} interactive={depth === 0} onSwipe={(dir) => onSwipe(t.id, dir)} />
+                <SwipeCard
+                  key={t.id}
+                  task={t}
+                  depth={depth}
+                  interactive={depth === 0}
+                  locked={depth === 0 && locked}
+                  onSwipe={(dir) => onSwipe(t.id, dir)}
+                  onBlockRequest={() => onBlockRequest(t.id)}
+                  onSkip={() => onSkip(t.id)}
+                  onAddComment={(texte) => onAddComment(t.id, texte)}
+                />
               );
             })
         )}
       </div>
 
       {visible.length > 0 && (
-        <div className="pf-swipe-buttons">
-          <button className="pf-round pf-round-green" onClick={() => onSwipe(visible[0].id, "left")} aria-label="Terminé">
-            ✕
-          </button>
-          <button className="pf-round pf-round-bronze" onClick={() => onSwipe(visible[0].id, "up")} aria-label="Bloqué">
-            ↑
-          </button>
-          <button className="pf-round pf-round-navy" onClick={() => onSwipe(visible[0].id, "right")} aria-label="À faire">
-            →
-          </button>
-        </div>
+        <>
+          {locked && (
+            <p className="pf-locked-note">
+              🔒 Assignée à {top.assignee} — vous ne pouvez pas modifier son statut, mais vous pouvez la commenter.
+            </p>
+          )}
+          <div className="pf-swipe-buttons">
+            <button className="pf-round pf-round-green" disabled={locked} onClick={() => onSwipe(visible[0].id, "left")} aria-label="Terminé">
+              ✕
+            </button>
+            <button className="pf-round pf-round-bronze" disabled={locked} onClick={() => onBlockRequest(visible[0].id)} aria-label="Bloqué">
+              ↑
+            </button>
+            <button className="pf-round pf-round-navy" disabled={locked} onClick={() => onSwipe(visible[0].id, "right")} aria-label="À faire">
+              →
+            </button>
+          </div>
+        </>
       )}
     </div>
   );
 }
 
-function SwipeCard({ task, depth, interactive, onSwipe }) {
+function SwipeCard({ task, depth, interactive, locked, onSwipe, onBlockRequest, onSkip, onAddComment }) {
   const [drag, setDrag] = useState({ x: 0, y: 0, active: false });
+  const [showComment, setShowComment] = useState(false);
+  const [commentText, setCommentText] = useState("");
   const start = useRef({ x: 0, y: 0 });
 
   const prog = PROGRAMMES[task.programme];
 
   const onDown = (e) => {
-    if (!interactive) return;
+    if (!interactive || locked) return;
     const p = e.touches ? e.touches[0] : e;
     start.current = { x: p.clientX, y: p.clientY };
     setDrag((d) => ({ ...d, active: true }));
@@ -536,30 +599,32 @@ function SwipeCard({ task, depth, interactive, onSwipe }) {
     setDrag((d) => {
       const { x, y } = d;
       const THRESH = 110;
-      if (y < -THRESH && Math.abs(y) > Math.abs(x)) fly("up");
-      else if (x > THRESH) fly("right");
+      if (y < -THRESH && Math.abs(y) > Math.abs(x)) {
+        onBlockRequest();
+        return { x: 0, y: 0, active: false };
+      } else if (x > THRESH) fly("right");
       else if (x < -THRESH) fly("left");
       else return { x: 0, y: 0, active: false };
       return d;
     });
   };
   const fly = (dir) => {
-    const dest = dir === "left" ? { x: -900, y: -60 } : dir === "right" ? { x: 900, y: -60 } : { x: 0, y: -900 };
+    const dest = dir === "left" ? { x: -900, y: -60 } : { x: 900, y: -60 };
     setDrag({ x: dest.x, y: dest.y, active: false, flying: true });
     setTimeout(() => onSwipe(dir), 180);
   };
 
   useEffect(() => {
     const onKey = (e) => {
-      if (!interactive) return;
+      if (!interactive || locked) return;
       if (e.key === "ArrowLeft") fly("left");
       if (e.key === "ArrowRight") fly("right");
-      if (e.key === "ArrowUp") fly("up");
+      if (e.key === "ArrowUp") onBlockRequest();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [interactive]);
+  }, [interactive, locked]);
 
   const rot = drag.x / 18;
   const style = interactive
@@ -572,21 +637,34 @@ function SwipeCard({ task, depth, interactive, onSwipe }) {
   const stampOpacity = {
     left: Math.min(1, Math.max(0, -drag.x / 110)),
     right: Math.min(1, Math.max(0, drag.x / 110)),
-    up: Math.min(1, Math.max(0, -drag.y / 110)),
+  };
+
+  const submitComment = (e) => {
+    e.preventDefault();
+    const texte = commentText.trim();
+    if (!texte) return;
+    onAddComment(texte);
+    setCommentText("");
+    setShowComment(false);
   };
 
   return (
-    <div className="pf-card" style={{ ...style, zIndex: 10 - depth, borderTopColor: prog.color }} onMouseDown={onDown} onTouchStart={onDown}>
-      {interactive && (
+    <div
+      className={"pf-card" + (locked ? " pf-card-locked" : "")}
+      style={{ ...style, zIndex: 10 - depth, borderTopColor: prog.color }}
+      onMouseDown={onDown}
+      onTouchStart={onDown}
+    >
+      {interactive && !locked && (
         <>
           <div className="pf-stamp pf-stamp-green" style={{ opacity: stampOpacity.left }}>TRAITÉ</div>
           <div className="pf-stamp pf-stamp-navy" style={{ opacity: stampOpacity.right }}>À FAIRE</div>
-          <div className="pf-stamp pf-stamp-bronze pf-stamp-top" style={{ opacity: stampOpacity.up }}>BLOQUÉ</div>
         </>
       )}
       <div className="pf-card-top" style={{ color: prog.color, background: prog.tint }}>
         <span className="pf-chip-prog">{prog.label}</span>
         {task.personnelle && <span className="pf-chip-private">🔒 Personnelle</span>}
+        {locked && <span className="pf-chip-private">👁 Lecture seule</span>}
       </div>
       <div className="pf-card-body">
         <div className="pf-card-chantier">{task.chantier}</div>
@@ -595,6 +673,33 @@ function SwipeCard({ task, depth, interactive, onSwipe }) {
         <DueBlock echeance={task.echeance} statut={task.statut} />
         {task.demarreeLe && <div className="pf-card-started">Démarrée le {formatDateLong(task.demarreeLe)}</div>}
       </div>
+      {interactive && (
+        <div className="pf-card-quickactions" onMouseDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
+          {showComment ? (
+            <form className="pf-comment-form" onSubmit={submitComment}>
+              <input
+                className="pf-input"
+                autoFocus
+                placeholder="Votre commentaire…"
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+              />
+              <button className="pf-btn pf-btn-outline pf-btn-sm" type="submit" disabled={!commentText.trim()}>
+                Envoyer
+              </button>
+            </form>
+          ) : (
+            <div className="pf-card-quickrow">
+              <button type="button" className="pf-quick-btn" onClick={() => setShowComment(true)}>
+                💬 Commenter
+              </button>
+              <button type="button" className="pf-quick-btn" onClick={onSkip}>
+                ⤼ Passer
+              </button>
+            </div>
+          )}
+        </div>
+      )}
       <div className="pf-card-foot">
         <span className={"pf-status-pill st-" + task.statut}>{STATUTS[task.statut].label}</span>
         <span className="pf-card-foot-right">
@@ -609,7 +714,7 @@ function SwipeCard({ task, depth, interactive, onSwipe }) {
 /* ---------------------------------------------------------------------
    BOARD VIEW
 --------------------------------------------------------------------- */
-function BoardView({ tasks, collaborators, onStatusChange, onAddComment }) {
+function BoardView({ tasks, collaborators, profile, canAct, onStatusChange, onAddComment, onReassign }) {
   const [progFilter, setProgFilter] = useState(new Set(Object.keys(PROGRAMMES)));
   const [assigneeFilter, setAssigneeFilter] = useState("Tous");
   const [openId, setOpenId] = useState(null);
@@ -663,10 +768,14 @@ function BoardView({ tasks, collaborators, onStatusChange, onAddComment }) {
                   <BoardCard
                     key={t.id}
                     task={t}
+                    collaborators={collaborators}
+                    canAct={canAct(t)}
+                    isAdmin={profile.isAdmin}
                     open={openId === t.id}
                     onToggle={() => setOpenId(openId === t.id ? null : t.id)}
                     onStatusChange={onStatusChange}
                     onAddComment={onAddComment}
+                    onReassign={onReassign}
                   />
                 ))}
               </div>
@@ -678,7 +787,7 @@ function BoardView({ tasks, collaborators, onStatusChange, onAddComment }) {
   );
 }
 
-function BoardCard({ task, open, onToggle, onStatusChange, onAddComment }) {
+function BoardCard({ task, collaborators, canAct, isAdmin, open, onToggle, onStatusChange, onAddComment, onReassign }) {
   const prog = PROGRAMMES[task.programme];
   const [commentText, setCommentText] = useState("");
 
@@ -702,10 +811,24 @@ function BoardCard({ task, open, onToggle, onStatusChange, onAddComment }) {
         </div>
         <DueBlock echeance={task.echeance} statut={task.statut} />
       </div>
-      <div className="pf-bcard-meta">
-        <span className="pf-mono">{task.assignee || "non assignée"}</span>
+      <div className="pf-bcard-meta" onClick={(e) => isAdmin && e.stopPropagation()}>
+        {isAdmin ? (
+          <select
+            className="pf-select pf-select-mini"
+            value={task.assignee || ""}
+            onChange={(e) => onReassign(task.id, e.target.value)}
+          >
+            <option value="">— Non assignée —</option>
+            {collaborators.map((c) => (
+              <option key={c}>{c}</option>
+            ))}
+          </select>
+        ) : (
+          <span className="pf-mono">{task.assignee || "non assignée"}</span>
+        )}
         {task.demarreeLe && <span className="pf-bcard-started">Démarrée le {formatDate(task.demarreeLe.slice(0, 10))}</span>}
         {task.commentaires?.length > 0 && <span className="pf-card-comments">💬 {task.commentaires.length}</span>}
+        {!canAct && <span className="pf-chip-private pf-chip-private-sm">👁 Lecture seule</span>}
       </div>
       {open && (
         <div className="pf-bcard-detail">
@@ -714,6 +837,7 @@ function BoardCard({ task, open, onToggle, onStatusChange, onAddComment }) {
             {Object.entries(STATUTS).map(([k, s]) => (
               <button
                 key={k}
+                disabled={!canAct}
                 className={"pf-mini-btn" + (task.statut === k ? " active" : "")}
                 style={{ borderColor: s.color, color: task.statut === k ? "#fff" : s.color, background: task.statut === k ? s.color : "transparent" }}
                 onClick={() => onStatusChange(task.id, k)}
@@ -759,6 +883,60 @@ function BoardCard({ task, open, onToggle, onStatusChange, onAddComment }) {
 }
 
 /* ---------------------------------------------------------------------
+   KPI VIEW
+--------------------------------------------------------------------- */
+function KpiView({ tasks }) {
+  const total = tasks.length;
+  const globalDone = tasks.filter((t) => t.statut === "termine").length;
+  const globalOverdue = tasks.filter((t) => dueUrgency(t.echeance, t.statut) === "overdue").length;
+
+  const parProgramme = Object.entries(PROGRAMMES).map(([key, prog]) => {
+    const items = tasks.filter((t) => t.programme === key);
+    const parStatut = Object.fromEntries(Object.keys(STATUTS).map((s) => [s, items.filter((t) => t.statut === s).length]));
+    const overdue = items.filter((t) => dueUrgency(t.echeance, t.statut) === "overdue").length;
+    const pct = items.length ? Math.round((parStatut.termine / items.length) * 100) : 0;
+    return { key, prog, total: items.length, parStatut, overdue, pct };
+  });
+
+  return (
+    <div className="pf-kpi">
+      <div className="pf-kpi-summary">
+        <div className="pf-kpi-tile">
+          <div className="pf-kpi-value">{total}</div>
+          <div className="pf-kpi-label">Tâches au total</div>
+        </div>
+        <div className="pf-kpi-tile">
+          <div className="pf-kpi-value">{total ? Math.round((globalDone / total) * 100) : 0}%</div>
+          <div className="pf-kpi-label">Terminées</div>
+        </div>
+        <div className="pf-kpi-tile pf-kpi-tile-warn">
+          <div className="pf-kpi-value">{globalOverdue}</div>
+          <div className="pf-kpi-label">En retard</div>
+        </div>
+      </div>
+
+      {parProgramme.map(({ key, prog, total, parStatut, overdue, pct }) => (
+        <div className="pf-kpi-card" key={key}>
+          <div className="pf-kpi-card-head">
+            <span className="pf-kpi-prog" style={{ color: prog.color, background: prog.tint }}>{prog.label}</span>
+            <span className="pf-kpi-pct">{pct}% terminé</span>
+          </div>
+          <div className="pf-kpi-bar">
+            <div className="pf-kpi-bar-fill" style={{ width: pct + "%", background: prog.color }} />
+          </div>
+          <div className="pf-kpi-stats">
+            <span><i className="pf-dot" style={{ background: STATUTS.a_demarrer.color }} /> {parStatut.a_demarrer} à démarrer</span>
+            <span><i className="pf-dot" style={{ background: STATUTS.en_cours.color }} /> {parStatut.en_cours} bloquées</span>
+            <span><i className="pf-dot" style={{ background: STATUTS.termine.color }} /> {parStatut.termine} terminées</span>
+            {overdue > 0 && <span className="pf-kpi-overdue">⚠ {overdue} en retard</span>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------
    NOTIFICATIONS
 --------------------------------------------------------------------- */
 function NotifsView({ notifs, onOpen }) {
@@ -787,6 +965,51 @@ function NotifsView({ notifs, onOpen }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------
+   BLOCK REASON MODAL
+--------------------------------------------------------------------- */
+function BlockReasonModal({ onClose, onSubmit }) {
+  const [texte, setTexte] = useState("");
+  const [sending, setSending] = useState(false);
+
+  return (
+    <div className="pf-modal-backdrop" onMouseDown={onClose}>
+      <div className="pf-modal" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="pf-modal-eyebrow">TÂCHE BLOQUÉE</div>
+        <h2 className="pf-modal-title">Pourquoi cette tâche est-elle bloquée ?</h2>
+        <p className="pf-empty-sub" style={{ marginBottom: 10 }}>
+          Un commentaire est requis pour marquer une tâche comme bloquée, afin que l'équipe sache ce qui l'empêche d'avancer.
+        </p>
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!texte.trim() || sending) return;
+            setSending(true);
+            await onSubmit(texte.trim());
+          }}
+        >
+          <textarea
+            className="pf-input pf-textarea"
+            autoFocus
+            rows={3}
+            placeholder="ex. En attente de retour du cabinet juridique"
+            value={texte}
+            onChange={(e) => setTexte(e.target.value)}
+          />
+          <div className="pf-modal-actions">
+            <button type="button" className="pf-btn pf-btn-outline" onClick={onClose}>
+              Annuler
+            </button>
+            <button type="submit" className="pf-btn pf-btn-primary" disabled={!texte.trim() || sending}>
+              Marquer comme bloquée
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
