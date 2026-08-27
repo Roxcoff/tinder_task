@@ -30,7 +30,9 @@ const SEED_TASKS = [
 ];
 
 async function runSeed(prisma) {
-  const existing = await prisma.task.count();
+  const existing = await prisma.task.count({
+    where: { titre: { in: SEED_TASKS.map((t) => t[2]) } },
+  });
   if (existing > 0) {
     return { seeded: false, existing };
   }
