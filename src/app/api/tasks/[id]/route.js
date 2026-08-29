@@ -26,6 +26,35 @@ export async function PATCH(req, { params }) {
 
   const existing = await prisma.task.findUnique({ where: { id: params.id }, include: { assignee: true, createdBy: true } });
   if (!existing) return NextResponse.json({ error: "Tâche introuvable" }, { status: 404 });
+  const canEdit = admin || existing.createdById === actor.id;
+
+  // --- Archivage / désarchivage (créateur ou admin) ---
+  if (body.archived !== undefined) {
+    if (!canEdit) return NextResponse.json({ error: "Seul le créateur ou un administrateur peut archiver cette tâche" }, { status: 403 });
+    await prisma.task.update({ where: { id: params.id }, data: { archived: !!body.archived } });
+    return NextResponse.json({ ok: true });
+  }
+
+  // --- Modification des champs de la tâche (créateur ou admin) ---
+  if (body.edit) {
+    if (!canEdit) return NextResponse.json({ error: "Seul le créateur ou un administrateur peut modifier cette tâche" }, { status: 403 });
+    const e = body.edit;
+    if (!e.titre || !e.titre.trim()) return NextResponse.json({ error: "Intitulé requis" }, { status: 400 });
+    if (!["mkd", "serenity", "mizzy"].includes(e.programme)) return NextResponse.json({ error: "Programme invalide" }, { status: 400 });
+
+    await prisma.task.update({
+      where: { id: params.id },
+      data: {
+        titre: e.titre.trim(),
+        programme: e.programme,
+        chantier: (e.chantier || "Non classé").trim(),
+        echeance: e.echeance ? new Date(e.echeance) : null,
+        notes: e.notes || "",
+        personnelle: !!e.personnelle,
+      },
+    });
+    return NextResponse.json({ ok: true });
+  }
 
   // --- Réassignation (réservée aux administrateurs) ---
   if (body.assignee !== undefined) {

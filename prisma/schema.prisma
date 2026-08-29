@@ -62,6 +62,7 @@ model Task {
   statut      Statut    @default(a_demarrer)
   notes       String?
   personnelle Boolean   @default(false)
+  archived    Boolean   @default(false)
   assigneeId  String?
   assignee    User?     @relation("assignee", fields: [assigneeId], references: [id])
   createdById String

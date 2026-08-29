@@ -133,6 +133,7 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [notifPermission, setNotifPermission] = useState("unsupported");
   const [blockPrompt, setBlockPrompt] = useState(null);
+  const [editingTask, setEditingTask] = useState(null);
 
   useEffect(() => {
     if (typeof Notification !== "undefined") setNotifPermission(Notification.permission);
@@ -262,6 +263,29 @@ export default function App() {
     }
   }
 
+  async function editTask(taskId, form) {
+    try {
+      await api(`/api/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify({ edit: form }) });
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...form } : t)));
+      setEditingTask(null);
+      showToast("Tâche modifiée");
+    } catch (e) {
+      showToast(e.message || "Échec de la modification");
+    }
+  }
+
+  async function archiveTask(taskId) {
+    if (!confirm("Archiver cette tâche ? Elle disparaîtra du dossier pour tout le monde.")) return;
+    try {
+      await api(`/api/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify({ archived: true }) });
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      advanceQueue(taskId);
+      showToast("Tâche archivée");
+    } catch (e) {
+      showToast(e.message || "Échec de l'archivage");
+    }
+  }
+
   async function addTask(form) {
     try {
       const { task } = await api("/api/tasks", { method: "POST", body: JSON.stringify(form) });
@@ -358,6 +382,8 @@ export default function App() {
             onStatusChange={(id, s) => (s === "en_cours" ? setBlockPrompt({ taskId: id }) : updateStatus(id, s))}
             onAddComment={addComment}
             onReassign={reassignTask}
+            onEdit={setEditingTask}
+            onArchive={archiveTask}
           />
         )}
         {view === "kpi" && <KpiView tasks={tasks} />}
@@ -381,6 +407,14 @@ export default function App() {
 
       {showAdd && (
         <AddTaskModal collaborators={collaborators} onClose={() => setShowAdd(false)} onSubmit={addTask} />
+      )}
+
+      {editingTask && (
+        <TaskEditModal
+          task={editingTask}
+          onClose={() => setEditingTask(null)}
+          onSubmit={(form) => editTask(editingTask.id, form)}
+        />
       )}
 
       {toast && <div className="pf-toast">{toast}</div>}
@@ -724,7 +758,7 @@ function SwipeCard({ task, depth, interactive, locked, onSwipe, onBlockRequest, 
 /* ---------------------------------------------------------------------
    BOARD VIEW
 --------------------------------------------------------------------- */
-function BoardView({ tasks, collaborators, profile, canAct, onStatusChange, onAddComment, onReassign }) {
+function BoardView({ tasks, collaborators, profile, canAct, onStatusChange, onAddComment, onReassign, onEdit, onArchive }) {
   const [progFilter, setProgFilter] = useState(new Set(Object.keys(PROGRAMMES)));
   const [assigneeFilter, setAssigneeFilter] = useState("Tous");
   const [openId, setOpenId] = useState(null);
@@ -780,12 +814,15 @@ function BoardView({ tasks, collaborators, profile, canAct, onStatusChange, onAd
                     task={t}
                     collaborators={collaborators}
                     canAct={canAct(t)}
+                    canEdit={profile.isAdmin || t.creePar === profile.name}
                     isAdmin={profile.isAdmin}
                     open={openId === t.id}
                     onToggle={() => setOpenId(openId === t.id ? null : t.id)}
                     onStatusChange={onStatusChange}
                     onAddComment={onAddComment}
                     onReassign={onReassign}
+                    onEdit={onEdit}
+                    onArchive={onArchive}
                   />
                 ))}
               </div>
@@ -797,7 +834,7 @@ function BoardView({ tasks, collaborators, profile, canAct, onStatusChange, onAd
   );
 }
 
-function BoardCard({ task, collaborators, canAct, isAdmin, open, onToggle, onStatusChange, onAddComment, onReassign }) {
+function BoardCard({ task, collaborators, canAct, canEdit, isAdmin, open, onToggle, onStatusChange, onAddComment, onReassign, onEdit, onArchive }) {
   const prog = PROGRAMMES[task.programme];
   const [commentText, setCommentText] = useState("");
 
@@ -843,6 +880,16 @@ function BoardCard({ task, collaborators, canAct, isAdmin, open, onToggle, onSta
       {open && (
         <div className="pf-bcard-detail">
           {task.notes && <p className="pf-bcard-notes">{task.notes}</p>}
+          {canEdit && (
+            <div className="pf-bcard-editrow">
+              <button type="button" className="pf-quick-btn" onClick={() => onEdit(task)}>
+                ✎ Modifier
+              </button>
+              <button type="button" className="pf-quick-btn pf-quick-btn-danger" onClick={() => onArchive(task.id)}>
+                🗑 Archiver
+              </button>
+            </div>
+          )}
           <div className="pf-bcard-actions">
             {Object.entries(STATUTS).map(([k, s]) => (
               <button
@@ -908,6 +955,10 @@ function KpiView({ tasks }) {
     return { key, prog, total: items.length, parStatut, overdue, pct };
   });
 
+  const upcoming = tasks
+    .filter((t) => t.statut !== "termine" && t.echeance)
+    .sort((a, b) => a.echeance.localeCompare(b.echeance));
+
   return (
     <div className="pf-kpi">
       <a className="pf-btn pf-btn-primary pf-kpi-export" href="/api/export/xlsx">
@@ -926,6 +977,32 @@ function KpiView({ tasks }) {
           <div className="pf-kpi-value">{globalOverdue}</div>
           <div className="pf-kpi-label">En retard</div>
         </div>
+      </div>
+
+      <div className="pf-kpi-card">
+        <div className="pf-kpi-card-head">
+          <span className="pf-kpi-prog-title">📅 Priorités &amp; échéances</span>
+          <span className="pf-kpi-pct">{upcoming.length} tâche{upcoming.length > 1 ? "s" : ""} à venir</span>
+        </div>
+        {upcoming.length === 0 ? (
+          <p className="pf-empty-sub" style={{ margin: 0 }}>Rien à l'horizon — aucune échéance en attente.</p>
+        ) : (
+          <div className="pf-kpi-upcoming">
+            {upcoming.map((t) => {
+              const prog = PROGRAMMES[t.programme];
+              return (
+                <div className="pf-kpi-upcoming-row" key={t.id}>
+                  <span className="pf-kpi-upcoming-dot" style={{ background: prog.color }} />
+                  <div className="pf-kpi-upcoming-main">
+                    <div className="pf-kpi-upcoming-titre">{t.titre}</div>
+                    <div className="pf-kpi-upcoming-meta">{prog.label} · {t.assignee || "non assignée"}</div>
+                  </div>
+                  <DueBlock echeance={t.echeance} statut={t.statut} />
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {parProgramme.map(({ key, prog, total, parStatut, overdue, pct }) => (
@@ -1124,6 +1201,94 @@ function AddTaskModal({ collaborators, onClose, onSubmit }) {
             </button>
             <button type="submit" className="pf-btn pf-btn-primary">
               Ajouter au dossier
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------
+   TASK EDIT MODAL
+--------------------------------------------------------------------- */
+function TaskEditModal({ task, onClose, onSubmit }) {
+  const [form, setForm] = useState({
+    titre: task.titre,
+    programme: task.programme,
+    chantier: task.chantier,
+    echeance: task.echeance || "",
+    notes: task.notes || "",
+    personnelle: !!task.personnelle,
+  });
+
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  return (
+    <div className="pf-modal-backdrop" onMouseDown={onClose}>
+      <div className="pf-modal" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="pf-modal-eyebrow">MODIFIER LA TÂCHE</div>
+        <h2 className="pf-modal-title">Modifier « {task.titre} »</h2>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!form.titre.trim()) return;
+            onSubmit(form);
+          }}
+        >
+          <label className="pf-label">Intitulé de la tâche</label>
+          <input className="pf-input" value={form.titre} onChange={set("titre")} autoFocus required />
+
+          <label className="pf-label">Programme</label>
+          <div className="pf-radio-row">
+            {Object.entries(PROGRAMMES).map(([k, p]) => (
+              <button
+                type="button"
+                key={k}
+                className={"pf-radio" + (form.programme === k ? " active" : "")}
+                style={{ borderColor: p.color, background: form.programme === k ? p.color : "transparent", color: form.programme === k ? "#fff" : p.color }}
+                onClick={() => setForm((f) => ({ ...f, programme: k }))}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
+          <label className="pf-label">Chantier / catégorie</label>
+          <input className="pf-input" value={form.chantier} onChange={set("chantier")} />
+
+          <label className="pf-label">Échéance</label>
+          <input type="date" className="pf-input" value={form.echeance} onChange={set("echeance")} />
+
+          <label className="pf-label">Notes (optionnel)</label>
+          <textarea className="pf-input pf-textarea" value={form.notes} onChange={set("notes")} rows={2} />
+
+          <label className="pf-label">Visibilité</label>
+          <div className="pf-radio-row">
+            <button
+              type="button"
+              className={"pf-radio" + (!form.personnelle ? " active" : "")}
+              style={{ borderColor: "var(--navy)", background: !form.personnelle ? "var(--navy)" : "transparent", color: !form.personnelle ? "#fff" : "var(--navy)" }}
+              onClick={() => setForm((f) => ({ ...f, personnelle: false }))}
+            >
+              Collective — visible de l'équipe
+            </button>
+            <button
+              type="button"
+              className={"pf-radio" + (form.personnelle ? " active" : "")}
+              style={{ borderColor: "var(--navy)", background: form.personnelle ? "var(--navy)" : "transparent", color: form.personnelle ? "#fff" : "var(--navy)" }}
+              onClick={() => setForm((f) => ({ ...f, personnelle: true }))}
+            >
+              🔒 Personnelle — visible de vous seul(e)
+            </button>
+          </div>
+
+          <div className="pf-modal-actions">
+            <button type="button" className="pf-btn pf-btn-outline" onClick={onClose}>
+              Annuler
+            </button>
+            <button type="submit" className="pf-btn pf-btn-primary">
+              Enregistrer
             </button>
           </div>
         </form>

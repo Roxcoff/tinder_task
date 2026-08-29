@@ -38,7 +38,7 @@ export async function GET() {
   if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const tasks = await prisma.task.findMany({
-    where: { OR: [{ personnelle: false }, { createdById: userId }] },
+    where: { archived: false, OR: [{ personnelle: false }, { createdById: userId }] },
     include: {
       assignee: true,
       createdBy: true,
