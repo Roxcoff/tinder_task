@@ -21,6 +21,7 @@ enum Programme {
 enum Statut {
   a_demarrer
   en_cours
+  bloque
   termine
 }
 

@@ -4,7 +4,7 @@ import { getSessionUserId } from "@/lib/session";
 import { sendPushToUser } from "@/lib/push";
 import { isAdminName } from "@/lib/admin";
 
-const STATUT_LABELS = { a_demarrer: "À démarrer", en_cours: "En cours (bloqué)", termine: "Terminé" };
+const STATUT_LABELS = { a_demarrer: "À démarrer", en_cours: "En cours", bloque: "Bloqué", termine: "Terminé" };
 
 async function notify(actor, targets, taskId, message) {
   for (const target of targets.values()) {
@@ -122,7 +122,7 @@ export async function PATCH(req, { params }) {
   }
 
   const commentaire = (body.commentaire || "").trim();
-  if (statut === "en_cours" && !commentaire) {
+  if (statut === "bloque" && !commentaire) {
     return NextResponse.json({ error: "Un commentaire est requis pour bloquer une tâche" }, { status: 400 });
   }
 

@@ -9,7 +9,8 @@ const PROGRAMMES = {
 };
 const STATUTS = {
   a_demarrer: { label: "À démarrer", color: "FFEAEDF9" },
-  en_cours: { label: "Bloqué", color: "FFFBF1DE" },
+  en_cours: { label: "En cours", color: "FFE7EBF5" },
+  bloque: { label: "Bloqué", color: "FFFBF1DE" },
   termine: { label: "Terminé", color: "FFE3F6EE" },
 };
 
@@ -38,7 +39,8 @@ export async function GET() {
     { header: "Programme", key: "programme", width: 24 },
     { header: "Total", key: "total", width: 10 },
     { header: "À démarrer", key: "a", width: 12 },
-    { header: "Bloquées", key: "b", width: 12 },
+    { header: "En cours", key: "b", width: 12 },
+    { header: "Bloquées", key: "d", width: 12 },
     { header: "Terminées", key: "c", width: 12 },
     { header: "% terminé", key: "pct", width: 12 },
     { header: "En retard", key: "retard", width: 12 },
@@ -50,6 +52,7 @@ export async function GET() {
     const items = tasks.filter((t) => t.programme === key);
     const a = items.filter((t) => t.statut === "a_demarrer").length;
     const b = items.filter((t) => t.statut === "en_cours").length;
+    const d = items.filter((t) => t.statut === "bloque").length;
     const c = items.filter((t) => t.statut === "termine").length;
     const retard = items.filter((t) => t.echeance && t.statut !== "termine" && t.echeance < today).length;
     const row = synth.addRow({
@@ -57,6 +60,7 @@ export async function GET() {
       total: items.length,
       a,
       b,
+      d,
       c,
       pct: items.length ? `${Math.round((c / items.length) * 100)}%` : "0%",
       retard,

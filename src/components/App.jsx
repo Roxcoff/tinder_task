@@ -13,7 +13,8 @@ const PROGRAMMES = {
 
 const STATUTS = {
   a_demarrer: { label: "À démarrer", color: "#1C2F66" },
-  en_cours: { label: "En cours", color: "#A9752E" },
+  en_cours: { label: "En cours", color: "#4A5A93" },
+  bloque: { label: "Bloqué", color: "#A9752E" },
   termine: { label: "Terminé", color: "#0F9D74" },
 };
 
@@ -383,7 +384,7 @@ export default function App() {
             collaborators={collaborators}
             profile={profile}
             canAct={canAct}
-            onStatusChange={(id, s) => (s === "en_cours" ? setBlockPrompt({ taskId: id }) : updateStatus(id, s))}
+            onStatusChange={(id, s) => (s === "bloque" ? setBlockPrompt({ taskId: id }) : updateStatus(id, s))}
             onAddComment={addComment}
             onEdit={setEditingTask}
             onArchive={archiveTask}
@@ -402,7 +403,7 @@ export default function App() {
         <BlockReasonModal
           onClose={() => setBlockPrompt(null)}
           onSubmit={async (commentaire) => {
-            const ok = await updateStatus(blockPrompt.taskId, "en_cours", commentaire);
+            const ok = await updateStatus(blockPrompt.taskId, "bloque", commentaire);
             if (ok) advanceQueue(blockPrompt.taskId);
             setBlockPrompt(null);
           }}
@@ -541,7 +542,7 @@ function DeckView({ queue, taskById, deckScope, setDeckScope, onSwipe, onSkip, o
         </div>
         <div className="pf-legend">
           <span><i className="pf-dot" style={{ background: STATUTS.termine.color }} /> ← Terminé</span>
-          <span><i className="pf-dot" style={{ background: STATUTS.en_cours.color }} /> ↑ Bloqué</span>
+          <span><i className="pf-dot" style={{ background: STATUTS.en_cours.color }} /> ↑ En cours</span>
           <span><i className="pf-dot" style={{ background: STATUTS.a_demarrer.color }} /> → À faire</span>
         </div>
       </div>
@@ -594,7 +595,7 @@ function DeckView({ queue, taskById, deckScope, setDeckScope, onSwipe, onSkip, o
             <button className="pf-round pf-round-green" disabled={locked} onClick={() => onSwipe(visible[0].id, "left")} aria-label="Terminé">
               ✕
             </button>
-            <button className="pf-round pf-round-bronze" disabled={locked} onClick={() => onBlockRequest(visible[0].id)} aria-label="Bloqué">
+            <button className="pf-round pf-round-teal" disabled={locked} onClick={() => onSwipe(visible[0].id, "up")} aria-label="En cours">
               ↑
             </button>
             <button className="pf-round pf-round-navy" disabled={locked} onClick={() => onSwipe(visible[0].id, "right")} aria-label="À faire">
@@ -640,17 +641,15 @@ function SwipeCard({ task, depth, interactive, locked, onSwipe, onBlockRequest, 
     setDrag((d) => {
       const { x, y } = d;
       const THRESH = 110;
-      if (y < -THRESH && Math.abs(y) > Math.abs(x)) {
-        onBlockRequest();
-        return { x: 0, y: 0, active: false };
-      } else if (x > THRESH) fly("right");
+      if (y < -THRESH && Math.abs(y) > Math.abs(x)) fly("up");
+      else if (x > THRESH) fly("right");
       else if (x < -THRESH) fly("left");
       else return { x: 0, y: 0, active: false };
       return d;
     });
   };
   const fly = (dir) => {
-    const dest = dir === "left" ? { x: -900, y: -60 } : { x: 900, y: -60 };
+    const dest = dir === "left" ? { x: -900, y: -60 } : dir === "right" ? { x: 900, y: -60 } : { x: 0, y: -900 };
     setDrag({ x: dest.x, y: dest.y, active: false, flying: true });
     setTimeout(() => onSwipe(dir), 180);
   };
@@ -660,7 +659,7 @@ function SwipeCard({ task, depth, interactive, locked, onSwipe, onBlockRequest, 
       if (!interactive || locked) return;
       if (e.key === "ArrowLeft") fly("left");
       if (e.key === "ArrowRight") fly("right");
-      if (e.key === "ArrowUp") onBlockRequest();
+      if (e.key === "ArrowUp") fly("up");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -678,6 +677,7 @@ function SwipeCard({ task, depth, interactive, locked, onSwipe, onBlockRequest, 
   const stampOpacity = {
     left: Math.min(1, Math.max(0, -drag.x / 110)),
     right: Math.min(1, Math.max(0, drag.x / 110)),
+    up: Math.min(1, Math.max(0, -drag.y / 110)),
   };
 
   const submitComment = (e) => {
@@ -700,6 +700,7 @@ function SwipeCard({ task, depth, interactive, locked, onSwipe, onBlockRequest, 
         <>
           <div className="pf-stamp pf-stamp-green" style={{ opacity: stampOpacity.left }}>TRAITÉ</div>
           <div className="pf-stamp pf-stamp-navy" style={{ opacity: stampOpacity.right }}>À FAIRE</div>
+          <div className="pf-stamp pf-stamp-teal pf-stamp-top" style={{ opacity: stampOpacity.up }}>EN COURS</div>
         </>
       )}
       <div className="pf-card-top" style={{ color: prog.color, background: prog.tint }}>
@@ -744,6 +745,9 @@ function SwipeCard({ task, depth, interactive, locked, onSwipe, onBlockRequest, 
               <button type="button" className="pf-quick-btn" onClick={() => setShowComment(true)}>
                 💬 Commenter
               </button>
+              <button type="button" className="pf-quick-btn pf-quick-btn-warn" onClick={onBlockRequest}>
+                🚫 Bloquer
+              </button>
               <button type="button" className="pf-quick-btn" onClick={onSkip}>
                 ⤼ Passer
               </button>
@@ -779,7 +783,7 @@ function BoardView({ tasks, collaborators, profile, canAct, onStatusChange, onAd
   };
 
   const filtered = tasks.filter((t) => progFilter.has(t.programme) && (assigneeFilter === "Tous" || (t.assignees || []).includes(assigneeFilter)));
-  const columns = ["a_demarrer", "en_cours", "termine"];
+  const columns = ["a_demarrer", "en_cours", "bloque", "termine"];
 
   return (
     <div className="pf-board">
@@ -937,9 +941,36 @@ function BoardCard({ task, canAct, canEdit, open, onToggle, onStatusChange, onAd
 /* ---------------------------------------------------------------------
    KPI VIEW
 --------------------------------------------------------------------- */
+function KpiTaskList({ tasks }) {
+  return (
+    <div className="pf-kpi-upcoming">
+      {tasks.map((t) => {
+        const prog = PROGRAMMES[t.programme];
+        return (
+          <div className="pf-kpi-upcoming-row" key={t.id}>
+            <span className="pf-kpi-upcoming-dot" style={{ background: prog.color }} />
+            <div className="pf-kpi-upcoming-main">
+              <div className="pf-kpi-upcoming-titre">{t.titre}</div>
+              <div className="pf-kpi-upcoming-meta">{prog.label} · {t.assignees?.length ? t.assignees.join(", ") : "non assignée"}</div>
+            </div>
+            <DueBlock echeance={t.echeance} statut={t.statut} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+const KPI_FILTER_TITLES = { done: "✓ Tâches terminées", overdue: "⚠ Tâches en retard" };
+
 function KpiView({ tasks, collaborators, profile }) {
   const [assigneeFilter, setAssigneeFilter] = useState("Tous");
+  const [kpiFilter, setKpiFilter] = useState(null);
   const filteredTasks = tasks.filter((t) => assigneeFilter === "Tous" || (t.assignees || []).includes(assigneeFilter));
+
+  const toggleKpiFilter = (next) => {
+    setKpiFilter((cur) => (cur && cur.type === next.type && cur.programme === next.programme ? null : next));
+  };
 
   const total = filteredTasks.length;
   const globalDone = filteredTasks.filter((t) => t.statut === "termine").length;
@@ -956,6 +987,14 @@ function KpiView({ tasks, collaborators, profile }) {
   const upcoming = filteredTasks
     .filter((t) => t.statut !== "termine" && t.echeance)
     .sort((a, b) => a.echeance.localeCompare(b.echeance));
+
+  let kpiListTasks = null;
+  if (kpiFilter) {
+    kpiListTasks = filteredTasks
+      .filter((t) => !kpiFilter.programme || t.programme === kpiFilter.programme)
+      .filter((t) => (kpiFilter.type === "done" ? t.statut === "termine" : dueUrgency(t.echeance, t.statut) === "overdue"))
+      .sort((a, b) => (a.echeance || "").localeCompare(b.echeance || ""));
+  }
 
   return (
     <div className="pf-kpi">
@@ -976,15 +1015,38 @@ function KpiView({ tasks, collaborators, profile }) {
           <div className="pf-kpi-value">{total}</div>
           <div className="pf-kpi-label">Tâches au total</div>
         </div>
-        <div className="pf-kpi-tile">
+        <button type="button" className="pf-kpi-tile pf-kpi-tile-clickable" onClick={() => toggleKpiFilter({ type: "done" })}>
           <div className="pf-kpi-value">{total ? Math.round((globalDone / total) * 100) : 0}%</div>
           <div className="pf-kpi-label">Terminées</div>
-        </div>
-        <div className="pf-kpi-tile pf-kpi-tile-warn">
+        </button>
+        <button
+          type="button"
+          className="pf-kpi-tile pf-kpi-tile-warn pf-kpi-tile-clickable"
+          onClick={() => toggleKpiFilter({ type: "overdue" })}
+        >
           <div className="pf-kpi-value">{globalOverdue}</div>
           <div className="pf-kpi-label">En retard</div>
-        </div>
+        </button>
       </div>
+
+      {kpiFilter && (
+        <div className="pf-kpi-card">
+          <div className="pf-kpi-card-head">
+            <span className="pf-kpi-prog-title">
+              {KPI_FILTER_TITLES[kpiFilter.type]}
+              {kpiFilter.programme ? ` · ${PROGRAMMES[kpiFilter.programme].label}` : ""}
+            </span>
+            <button type="button" className="pf-kpi-linklike" onClick={() => setKpiFilter(null)}>
+              ✕ Fermer
+            </button>
+          </div>
+          {kpiListTasks.length === 0 ? (
+            <p className="pf-empty-sub" style={{ margin: 0 }}>Aucune tâche ne correspond.</p>
+          ) : (
+            <KpiTaskList tasks={kpiListTasks} />
+          )}
+        </div>
+      )}
 
       <div className="pf-kpi-card">
         <div className="pf-kpi-card-head">
@@ -994,21 +1056,7 @@ function KpiView({ tasks, collaborators, profile }) {
         {upcoming.length === 0 ? (
           <p className="pf-empty-sub" style={{ margin: 0 }}>Rien à l'horizon — aucune échéance en attente.</p>
         ) : (
-          <div className="pf-kpi-upcoming">
-            {upcoming.map((t) => {
-              const prog = PROGRAMMES[t.programme];
-              return (
-                <div className="pf-kpi-upcoming-row" key={t.id}>
-                  <span className="pf-kpi-upcoming-dot" style={{ background: prog.color }} />
-                  <div className="pf-kpi-upcoming-main">
-                    <div className="pf-kpi-upcoming-titre">{t.titre}</div>
-                    <div className="pf-kpi-upcoming-meta">{prog.label} · {t.assignees?.length ? t.assignees.join(", ") : "non assignée"}</div>
-                  </div>
-                  <DueBlock echeance={t.echeance} statut={t.statut} />
-                </div>
-              );
-            })}
-          </div>
+          <KpiTaskList tasks={upcoming} />
         )}
       </div>
 
@@ -1016,16 +1064,23 @@ function KpiView({ tasks, collaborators, profile }) {
         <div className="pf-kpi-card" key={key}>
           <div className="pf-kpi-card-head">
             <span className="pf-kpi-prog" style={{ color: prog.color, background: prog.tint }}>{prog.label}</span>
-            <span className="pf-kpi-pct">{pct}% terminé</span>
+            <button type="button" className="pf-kpi-pct pf-kpi-linklike" onClick={() => toggleKpiFilter({ type: "done", programme: key })}>
+              {pct}% terminé
+            </button>
           </div>
           <div className="pf-kpi-bar">
             <div className="pf-kpi-bar-fill" style={{ width: pct + "%", background: prog.color }} />
           </div>
           <div className="pf-kpi-stats">
             <span><i className="pf-dot" style={{ background: STATUTS.a_demarrer.color }} /> {parStatut.a_demarrer} à démarrer</span>
-            <span><i className="pf-dot" style={{ background: STATUTS.en_cours.color }} /> {parStatut.en_cours} bloquées</span>
+            <span><i className="pf-dot" style={{ background: STATUTS.en_cours.color }} /> {parStatut.en_cours} en cours</span>
+            <span><i className="pf-dot" style={{ background: STATUTS.bloque.color }} /> {parStatut.bloque} bloquées</span>
             <span><i className="pf-dot" style={{ background: STATUTS.termine.color }} /> {parStatut.termine} terminées</span>
-            {overdue > 0 && <span className="pf-kpi-overdue">⚠ {overdue} en retard</span>}
+            {overdue > 0 && (
+              <button type="button" className="pf-kpi-overdue pf-kpi-linklike" onClick={() => toggleKpiFilter({ type: "overdue", programme: key })}>
+                ⚠ {overdue} en retard
+              </button>
+            )}
           </div>
         </div>
       ))}
