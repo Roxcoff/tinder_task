@@ -62,17 +62,28 @@ export async function PATCH(req, { params }) {
     if (!e.titre || !e.titre.trim()) return NextResponse.json({ error: "Intitulé requis" }, { status: 400 });
     if (!["mkd", "serenity", "mizzy"].includes(e.programme)) return NextResponse.json({ error: "Programme invalide" }, { status: 400 });
 
-    await prisma.task.update({
-      where: { id: params.id },
-      data: {
-        titre: e.titre.trim(),
-        programme: e.programme,
-        chantier: (e.chantier || "Non classé").trim(),
-        echeance: e.echeance ? new Date(e.echeance) : null,
-        notes: e.notes || "",
-        personnelle: !!e.personnelle,
-      },
-    });
+    const data = {
+      titre: e.titre.trim(),
+      programme: e.programme,
+      chantier: (e.chantier || "Non classé").trim(),
+      echeance: e.echeance ? new Date(e.echeance) : null,
+      notes: e.notes || "",
+      personnelle: !!e.personnelle,
+    };
+
+    let newAssignee = null;
+    if (admin && e.assignee !== undefined) {
+      const name = (e.assignee || "").trim();
+      newAssignee = name ? await prisma.user.upsert({ where: { name }, update: {}, create: { name } }) : null;
+      data.assigneeId = newAssignee?.id || null;
+    }
+
+    await prisma.task.update({ where: { id: params.id }, data });
+
+    if (newAssignee && newAssignee.id !== actor.id && newAssignee.id !== existing.assigneeId) {
+      const message = `${actor.name} vous a assigné « ${data.titre} »`;
+      await notify(actor, new Map([[newAssignee.id, newAssignee]]), params.id, message);
+    }
     return NextResponse.json({ ok: true });
   }
 

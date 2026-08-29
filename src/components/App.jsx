@@ -425,6 +425,8 @@ export default function App() {
       {editingTask && (
         <TaskEditModal
           task={editingTask}
+          collaborators={collaborators}
+          isAdmin={profile.isAdmin}
           onClose={() => setEditingTask(null)}
           onSubmit={(form) => editTask(editingTask.id, form)}
         />
@@ -497,6 +499,7 @@ function Header({ profile, view, setView, unread, onLogout, notifPermission, req
         <button className="pf-who" onClick={onLogout} title="Se déconnecter">
           <span className="pf-who-dot" />
           {profile.name}
+          {profile.isAdmin && <span className="pf-badge pf-badge-admin">ADMIN</span>}
         </button>
       </div>
       <nav className="pf-tabs">
@@ -1229,7 +1232,7 @@ function AddTaskModal({ collaborators, onClose, onSubmit }) {
 /* ---------------------------------------------------------------------
    TASK EDIT MODAL
 --------------------------------------------------------------------- */
-function TaskEditModal({ task, onClose, onSubmit }) {
+function TaskEditModal({ task, collaborators, isAdmin, onClose, onSubmit }) {
   const [form, setForm] = useState({
     titre: task.titre,
     programme: task.programme,
@@ -1237,6 +1240,7 @@ function TaskEditModal({ task, onClose, onSubmit }) {
     echeance: task.echeance || "",
     notes: task.notes || "",
     personnelle: !!task.personnelle,
+    assignee: task.assignee || "",
   });
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -1276,6 +1280,18 @@ function TaskEditModal({ task, onClose, onSubmit }) {
 
           <label className="pf-label">Échéance</label>
           <input type="date" className="pf-input" value={form.echeance} onChange={set("echeance")} />
+
+          {isAdmin && (
+            <>
+              <label className="pf-label">Assignée à</label>
+              <select className="pf-select pf-select-full" value={form.assignee} onChange={set("assignee")}>
+                <option value="">— Non assignée —</option>
+                {collaborators.map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </select>
+            </>
+          )}
 
           <label className="pf-label">Notes (optionnel)</label>
           <textarea className="pf-input pf-textarea" value={form.notes} onChange={set("notes")} rows={2} />
