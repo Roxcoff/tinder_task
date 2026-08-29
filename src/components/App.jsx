@@ -189,7 +189,7 @@ export default function App() {
   useEffect(() => {
     if (!profile) return;
     setQueue((q) => {
-      const base = tasks.filter((t) => (deckScope === "mine" ? t.assignee === profile.name : true));
+      const base = tasks.filter((t) => (deckScope === "mine" ? (t.assignees || []).includes(profile.name) : true));
       const ids = base.map((t) => t.id);
       const known = new Set(q);
       const added = ids.filter((id) => !known.has(id));
@@ -199,7 +199,7 @@ export default function App() {
 
   useEffect(() => {
     if (!profile) return;
-    const base = tasks.filter((t) => (deckScope === "mine" ? t.assignee === profile.name : true));
+    const base = tasks.filter((t) => (deckScope === "mine" ? (t.assignees || []).includes(profile.name) : true));
     setQueue(base.map((t) => t.id));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deckScope]);
@@ -252,21 +252,13 @@ export default function App() {
     if (ok) advanceQueue(taskId);
   }
 
-  async function reassignTask(taskId, assignee) {
-    try {
-      await api(`/api/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify({ assignee }) });
-      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, assignee: assignee || null } : t)));
-      if (assignee && !collaborators.includes(assignee)) setCollaborators((c) => [...c, assignee]);
-      showToast(assignee ? `Assignée à ${assignee}` : "Tâche désassignée");
-    } catch (e) {
-      showToast(e.message || "Échec de l'assignation");
-    }
-  }
-
   async function editTask(taskId, form) {
     try {
       await api(`/api/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify({ edit: form }) });
       setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...form } : t)));
+      for (const name of form.assignees || []) {
+        if (!collaborators.includes(name)) setCollaborators((c) => [...c, name]);
+      }
       setEditingTask(null);
       showToast("Tâche modifiée");
     } catch (e) {
@@ -302,11 +294,11 @@ export default function App() {
     try {
       const { task } = await api("/api/tasks", { method: "POST", body: JSON.stringify(form) });
       setTasks((prev) => [...prev, task]);
-      if (form.assignee && !collaborators.includes(form.assignee)) {
-        setCollaborators((c) => [...c, form.assignee]);
+      for (const name of form.assignees || []) {
+        if (!collaborators.includes(name)) setCollaborators((c) => [...c, name]);
       }
       setShowAdd(false);
-      showToast("Tâche ajoutée" + (form.assignee ? ` · assignée à ${form.assignee}` : ""));
+      showToast("Tâche ajoutée" + (form.assignees?.length ? ` · assignée à ${form.assignees.join(", ")}` : ""));
     } catch (e) {
       showToast(e.message || "Échec de l'ajout");
     }
@@ -353,7 +345,7 @@ export default function App() {
   }
 
   const unread = notifs.filter((n) => !n.lu).length;
-  const canAct = (task) => profile.isAdmin || !task.assignee || task.assignee === profile.name;
+  const canAct = (task) => profile.isAdmin || !task.assignees?.length || task.assignees.includes(profile.name);
 
   return (
     <div className="pf-root">
@@ -380,7 +372,7 @@ export default function App() {
             onBlockRequest={(taskId) => setBlockPrompt({ taskId })}
             canAct={canAct}
             onReset={() => {
-              const base = tasks.filter((t) => (deckScope === "mine" ? t.assignee === profile.name : true));
+              const base = tasks.filter((t) => (deckScope === "mine" ? (t.assignees || []).includes(profile.name) : true));
               setQueue(base.map((t) => t.id));
             }}
           />
@@ -393,7 +385,6 @@ export default function App() {
             canAct={canAct}
             onStatusChange={(id, s) => (s === "en_cours" ? setBlockPrompt({ taskId: id }) : updateStatus(id, s))}
             onAddComment={addComment}
-            onReassign={reassignTask}
             onEdit={setEditingTask}
             onArchive={archiveTask}
             onDelete={deleteTask}
@@ -596,7 +587,7 @@ function DeckView({ queue, taskById, deckScope, setDeckScope, onSwipe, onSkip, o
         <>
           {locked && (
             <p className="pf-locked-note">
-              🔒 Assignée à {top.assignee} — vous ne pouvez pas modifier son statut, mais vous pouvez la commenter.
+              🔒 Assignée à {top.assignees.join(", ")} — vous ne pouvez pas modifier son statut, mais vous pouvez la commenter.
             </p>
           )}
           <div className="pf-swipe-buttons">
@@ -763,7 +754,7 @@ function SwipeCard({ task, depth, interactive, locked, onSwipe, onBlockRequest, 
       <div className="pf-card-foot">
         <span className={"pf-status-pill st-" + task.statut}>{STATUTS[task.statut].label}</span>
         <span className="pf-card-foot-right">
-          <span className="pf-card-assignee">{task.assignee ? `→ ${task.assignee}` : "Non assignée"}</span>
+          <span className="pf-card-assignee">{task.assignees?.length ? `→ ${task.assignees.join(", ")}` : "Non assignée"}</span>
           {task.commentaires?.length > 0 && <span className="pf-card-comments">💬 {task.commentaires.length}</span>}
         </span>
       </div>
@@ -774,7 +765,7 @@ function SwipeCard({ task, depth, interactive, locked, onSwipe, onBlockRequest, 
 /* ---------------------------------------------------------------------
    BOARD VIEW
 --------------------------------------------------------------------- */
-function BoardView({ tasks, collaborators, profile, canAct, onStatusChange, onAddComment, onReassign, onEdit, onArchive, onDelete }) {
+function BoardView({ tasks, collaborators, profile, canAct, onStatusChange, onAddComment, onEdit, onArchive, onDelete }) {
   const [progFilter, setProgFilter] = useState(new Set(Object.keys(PROGRAMMES)));
   const [assigneeFilter, setAssigneeFilter] = useState("Tous");
   const [openId, setOpenId] = useState(null);
@@ -787,7 +778,7 @@ function BoardView({ tasks, collaborators, profile, canAct, onStatusChange, onAd
     });
   };
 
-  const filtered = tasks.filter((t) => progFilter.has(t.programme) && (assigneeFilter === "Tous" || t.assignee === assigneeFilter));
+  const filtered = tasks.filter((t) => progFilter.has(t.programme) && (assigneeFilter === "Tous" || (t.assignees || []).includes(assigneeFilter)));
   const columns = ["a_demarrer", "en_cours", "termine"];
 
   return (
@@ -828,15 +819,12 @@ function BoardView({ tasks, collaborators, profile, canAct, onStatusChange, onAd
                   <BoardCard
                     key={t.id}
                     task={t}
-                    collaborators={collaborators}
                     canAct={canAct(t)}
                     canEdit={profile.isAdmin || t.creePar === profile.name}
-                    isAdmin={profile.isAdmin}
                     open={openId === t.id}
                     onToggle={() => setOpenId(openId === t.id ? null : t.id)}
                     onStatusChange={onStatusChange}
                     onAddComment={onAddComment}
-                    onReassign={onReassign}
                     onEdit={onEdit}
                     onArchive={onArchive}
                     onDelete={onDelete}
@@ -851,7 +839,7 @@ function BoardView({ tasks, collaborators, profile, canAct, onStatusChange, onAd
   );
 }
 
-function BoardCard({ task, collaborators, canAct, canEdit, isAdmin, open, onToggle, onStatusChange, onAddComment, onReassign, onEdit, onArchive, onDelete }) {
+function BoardCard({ task, canAct, canEdit, open, onToggle, onStatusChange, onAddComment, onEdit, onArchive, onDelete }) {
   const prog = PROGRAMMES[task.programme];
   const [commentText, setCommentText] = useState("");
 
@@ -875,21 +863,8 @@ function BoardCard({ task, collaborators, canAct, canEdit, isAdmin, open, onTogg
         </div>
         <DueBlock echeance={task.echeance} statut={task.statut} />
       </div>
-      <div className="pf-bcard-meta" onClick={(e) => isAdmin && e.stopPropagation()}>
-        {isAdmin ? (
-          <select
-            className="pf-select pf-select-mini"
-            value={task.assignee || ""}
-            onChange={(e) => onReassign(task.id, e.target.value)}
-          >
-            <option value="">— Non assignée —</option>
-            {collaborators.map((c) => (
-              <option key={c}>{c}</option>
-            ))}
-          </select>
-        ) : (
-          <span className="pf-mono">{task.assignee || "non assignée"}</span>
-        )}
+      <div className="pf-bcard-meta">
+        <span className="pf-mono">{task.assignees?.length ? task.assignees.join(", ") : "non assignée"}</span>
         {task.demarreeLe && <span className="pf-bcard-started">Démarrée le {formatDate(task.demarreeLe.slice(0, 10))}</span>}
         {task.commentaires?.length > 0 && <span className="pf-card-comments">💬 {task.commentaires.length}</span>}
         {!canAct && <span className="pf-chip-private pf-chip-private-sm">👁 Lecture seule</span>}
@@ -964,7 +939,7 @@ function BoardCard({ task, collaborators, canAct, canEdit, isAdmin, open, onTogg
 --------------------------------------------------------------------- */
 function KpiView({ tasks, collaborators, profile }) {
   const [assigneeFilter, setAssigneeFilter] = useState("Tous");
-  const filteredTasks = tasks.filter((t) => assigneeFilter === "Tous" || t.assignee === assigneeFilter);
+  const filteredTasks = tasks.filter((t) => assigneeFilter === "Tous" || (t.assignees || []).includes(assigneeFilter));
 
   const total = filteredTasks.length;
   const globalDone = filteredTasks.filter((t) => t.statut === "termine").length;
@@ -1027,7 +1002,7 @@ function KpiView({ tasks, collaborators, profile }) {
                   <span className="pf-kpi-upcoming-dot" style={{ background: prog.color }} />
                   <div className="pf-kpi-upcoming-main">
                     <div className="pf-kpi-upcoming-titre">{t.titre}</div>
-                    <div className="pf-kpi-upcoming-meta">{prog.label} · {t.assignee || "non assignée"}</div>
+                    <div className="pf-kpi-upcoming-meta">{prog.label} · {t.assignees?.length ? t.assignees.join(", ") : "non assignée"}</div>
                   </div>
                   <DueBlock echeance={t.echeance} statut={t.statut} />
                 </div>
@@ -1137,18 +1112,71 @@ function BlockReasonModal({ onClose, onSubmit }) {
 }
 
 /* ---------------------------------------------------------------------
+   ASSIGNEE PICKER (multi-sélection)
+--------------------------------------------------------------------- */
+function AssigneePicker({ collaborators, selected, onChange }) {
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
+  const allNames = [...new Set([...collaborators, ...selected])];
+
+  const toggle = (name) => {
+    onChange(selected.includes(name) ? selected.filter((n) => n !== name) : [...selected, name]);
+  };
+  const addNew = () => {
+    const name = newName.trim();
+    if (name && !selected.includes(name)) onChange([...selected, name]);
+    setNewName("");
+    setAdding(false);
+  };
+
+  return (
+    <div className="pf-radio-row">
+      {allNames.map((name) => (
+        <button
+          type="button"
+          key={name}
+          className={"pf-radio" + (selected.includes(name) ? " active" : "")}
+          style={{
+            borderColor: "var(--navy)",
+            background: selected.includes(name) ? "var(--navy)" : "transparent",
+            color: selected.includes(name) ? "#fff" : "var(--navy)",
+          }}
+          onClick={() => toggle(name)}
+        >
+          {name}
+        </button>
+      ))}
+      {adding ? (
+        <input
+          className="pf-input pf-assignee-add-input"
+          autoFocus
+          placeholder="Nom…"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addNew();
+            }
+          }}
+          onBlur={addNew}
+        />
+      ) : (
+        <button type="button" className="pf-radio pf-radio-ghost" onClick={() => setAdding(true)}>
+          + Nouvelle personne
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------
    ADD TASK MODAL
 --------------------------------------------------------------------- */
 function AddTaskModal({ collaborators, onClose, onSubmit }) {
-  const [form, setForm] = useState({ titre: "", programme: "mkd", chantier: "", echeance: "", assignee: "", notes: "", personnelle: false });
-  const [addingPerson, setAddingPerson] = useState(false);
-  const [newPerson, setNewPerson] = useState("");
+  const [form, setForm] = useState({ titre: "", programme: "mkd", chantier: "", echeance: "", assignees: [], notes: "", personnelle: false });
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
-
-  useEffect(() => {
-    if (form.assignee === "__new") setAddingPerson(true);
-  }, [form.assignee]);
 
   return (
     <div className="pf-modal-backdrop" onMouseDown={onClose}>
@@ -1159,7 +1187,7 @@ function AddTaskModal({ collaborators, onClose, onSubmit }) {
           onSubmit={(e) => {
             e.preventDefault();
             if (!form.titre.trim()) return;
-            onSubmit({ ...form, assignee: addingPerson ? newPerson.trim() : form.assignee });
+            onSubmit(form);
           }}
         >
           <label className="pf-label">Intitulé de la tâche</label>
@@ -1183,26 +1211,11 @@ function AddTaskModal({ collaborators, onClose, onSubmit }) {
           <label className="pf-label">Chantier / catégorie</label>
           <input className="pf-input" value={form.chantier} onChange={set("chantier")} placeholder="ex. Actions prioritaires à court terme" />
 
-          <div className="pf-row2">
-            <div>
-              <label className="pf-label">Échéance</label>
-              <input type="date" className="pf-input" value={form.echeance} onChange={set("echeance")} />
-            </div>
-            <div>
-              <label className="pf-label">Assignée à</label>
-              {!addingPerson ? (
-                <select className="pf-select pf-select-full" value={form.assignee} onChange={set("assignee")}>
-                  <option value="">— Choisir —</option>
-                  {collaborators.map((c) => (
-                    <option key={c}>{c}</option>
-                  ))}
-                  <option value="__new">+ Nouvelle personne…</option>
-                </select>
-              ) : (
-                <input className="pf-input" autoFocus placeholder="Nom du collaborateur" value={newPerson} onChange={(e) => setNewPerson(e.target.value)} />
-              )}
-            </div>
-          </div>
+          <label className="pf-label">Échéance</label>
+          <input type="date" className="pf-input" value={form.echeance} onChange={set("echeance")} />
+
+          <label className="pf-label">Assignée à (une ou plusieurs personnes)</label>
+          <AssigneePicker collaborators={collaborators} selected={form.assignees} onChange={(assignees) => setForm((f) => ({ ...f, assignees }))} />
 
           <label className="pf-label">Notes (optionnel)</label>
           <textarea className="pf-input pf-textarea" value={form.notes} onChange={set("notes")} rows={2} />
@@ -1252,7 +1265,7 @@ function TaskEditModal({ task, collaborators, isAdmin, onClose, onSubmit }) {
     echeance: task.echeance || "",
     notes: task.notes || "",
     personnelle: !!task.personnelle,
-    assignee: task.assignee || "",
+    assignees: task.assignees || [],
   });
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -1295,13 +1308,8 @@ function TaskEditModal({ task, collaborators, isAdmin, onClose, onSubmit }) {
 
           {isAdmin && (
             <>
-              <label className="pf-label">Assignée à</label>
-              <select className="pf-select pf-select-full" value={form.assignee} onChange={set("assignee")}>
-                <option value="">— Non assignée —</option>
-                {collaborators.map((c) => (
-                  <option key={c}>{c}</option>
-                ))}
-              </select>
+              <label className="pf-label">Assignée à (une ou plusieurs personnes)</label>
+              <AssigneePicker collaborators={collaborators} selected={form.assignees} onChange={(assignees) => setForm((f) => ({ ...f, assignees }))} />
             </>
           )}
 

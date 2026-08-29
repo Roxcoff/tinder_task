@@ -20,7 +20,7 @@ export async function GET() {
   const tasks = await prisma.task.findMany({
     where: { OR: [{ personnelle: false }, { createdById: userId }] },
     include: {
-      assignee: true,
+      assignees: true,
       createdBy: true,
       events: { orderBy: { createdAt: "asc" } },
       comments: true,
@@ -91,7 +91,7 @@ export async function GET() {
       chantier: t.chantier,
       titre: t.titre,
       statut: STATUTS[t.statut]?.label || t.statut,
-      assignee: t.assignee?.name || "",
+      assignee: t.assignees.map((u) => u.name).join(", "),
       echeance: t.echeance ? t.echeance.toISOString().slice(0, 10) : "",
       demarree: demarree ? demarree.createdAt.toISOString().slice(0, 10) : "",
       creePar: t.createdBy?.name || "",

@@ -152,6 +152,8 @@ body {
       .pf-modal-title { font-family: "Bricolage Grotesque", sans-serif; font-size: 23px; font-weight: 700; margin: 4px 0 10px; color: var(--navy-deep); }
       .pf-radio-row { display: flex; flex-wrap: wrap; gap: 6px; }
       .pf-radio { font-family: inherit; font-size: 12px; font-weight: 700; padding: 8px 14px; border-radius: 20px; border: 1.5px solid; cursor: pointer; transition: all 0.15s ease; }
+      .pf-radio-ghost { border-style: dashed; border-color: var(--border) !important; color: var(--ink-soft) !important; background: transparent !important; }
+      .pf-assignee-add-input { width: auto; min-width: 140px; padding: 8px 14px; border-radius: 20px; font-size: 12px; }
       .pf-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
       .pf-toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); background: var(--navy-deep); color: #fff; padding: 11px 20px; border-radius: 20px; font-size: 13px; z-index: 60; box-shadow: var(--shadow-lg); }
       .pf-chip-private { font-family: "IBM Plex Mono", monospace; font-size: 10px; font-weight: 700; letter-spacing: 0.03em; }

@@ -14,7 +14,7 @@ export async function POST(req, { params }) {
   const actor = await prisma.user.findUnique({ where: { id: userId } });
   if (!actor) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const task = await prisma.task.findUnique({ where: { id: params.id }, include: { assignee: true, createdBy: true } });
+  const task = await prisma.task.findUnique({ where: { id: params.id }, include: { assignees: true, createdBy: true } });
   if (!task) return NextResponse.json({ error: "Tâche introuvable" }, { status: 404 });
 
   const comment = await prisma.comment.create({
@@ -23,7 +23,7 @@ export async function POST(req, { params }) {
   });
 
   const targets = new Map();
-  if (task.assignee && task.assignee.id !== actor.id) targets.set(task.assignee.id, task.assignee);
+  for (const a of task.assignees) if (a.id !== actor.id) targets.set(a.id, a);
   if (task.createdBy && task.createdBy.id !== actor.id) targets.set(task.createdBy.id, task.createdBy);
 
   for (const target of targets.values()) {

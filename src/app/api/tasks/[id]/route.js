@@ -15,6 +15,27 @@ async function notify(actor, targets, taskId, message) {
   }
 }
 
+async function upsertUsers(names) {
+  const clean = [...new Set((names || []).map((n) => (n || "").trim()).filter(Boolean))];
+  const users = [];
+  for (const name of clean) {
+    users.push(await prisma.user.upsert({ where: { name }, update: {}, create: { name } }));
+  }
+  return users;
+}
+
+async function applyAssignees(taskId, titre, actor, previousAssigneeIds, newAssignees) {
+  await prisma.task.update({
+    where: { id: taskId },
+    data: { assignees: { set: newAssignees.map((u) => ({ id: u.id })) } },
+  });
+  const added = newAssignees.filter((u) => !previousAssigneeIds.has(u.id) && u.id !== actor.id);
+  if (added.length) {
+    const message = `${actor.name} vous a assigné « ${titre} »`;
+    await notify(actor, new Map(added.map((u) => [u.id, u])), taskId, message);
+  }
+}
+
 export async function DELETE(req, { params }) {
   const userId = getSessionUserId();
   if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -44,9 +65,10 @@ export async function PATCH(req, { params }) {
   if (!actor) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const admin = isAdminName(actor.name);
 
-  const existing = await prisma.task.findUnique({ where: { id: params.id }, include: { assignee: true, createdBy: true } });
+  const existing = await prisma.task.findUnique({ where: { id: params.id }, include: { assignees: true, createdBy: true } });
   if (!existing) return NextResponse.json({ error: "Tâche introuvable" }, { status: 404 });
   const canEdit = admin || existing.createdById === actor.id;
+  const previousAssigneeIds = new Set(existing.assignees.map((u) => u.id));
 
   // --- Archivage / désarchivage (créateur ou admin) ---
   if (body.archived !== undefined) {
@@ -71,41 +93,20 @@ export async function PATCH(req, { params }) {
       personnelle: !!e.personnelle,
     };
 
-    let newAssignee = null;
-    if (admin && e.assignee !== undefined) {
-      const name = (e.assignee || "").trim();
-      newAssignee = name ? await prisma.user.upsert({ where: { name }, update: {}, create: { name } }) : null;
-      data.assigneeId = newAssignee?.id || null;
-    }
-
     await prisma.task.update({ where: { id: params.id }, data });
 
-    if (newAssignee && newAssignee.id !== actor.id && newAssignee.id !== existing.assigneeId) {
-      const message = `${actor.name} vous a assigné « ${data.titre} »`;
-      await notify(actor, new Map([[newAssignee.id, newAssignee]]), params.id, message);
+    if (admin && e.assignees !== undefined) {
+      const newAssignees = await upsertUsers(e.assignees);
+      await applyAssignees(params.id, data.titre, actor, previousAssigneeIds, newAssignees);
     }
     return NextResponse.json({ ok: true });
   }
 
   // --- Réassignation (réservée aux administrateurs) ---
-  if (body.assignee !== undefined) {
+  if (body.assignees !== undefined) {
     if (!admin) return NextResponse.json({ error: "Seul un administrateur peut assigner une tâche" }, { status: 403 });
-
-    let newAssignee = null;
-    const name = (body.assignee || "").trim();
-    if (name) {
-      newAssignee = await prisma.user.upsert({ where: { name }, update: {}, create: { name } });
-    }
-    const updated = await prisma.task.update({
-      where: { id: params.id },
-      data: { assigneeId: newAssignee?.id || null },
-      include: { assignee: true, createdBy: true },
-    });
-
-    if (newAssignee && newAssignee.id !== actor.id) {
-      const message = `${actor.name} vous a assigné « ${updated.titre} »`;
-      await notify(actor, new Map([[newAssignee.id, newAssignee]]), updated.id, message);
-    }
+    const newAssignees = await upsertUsers(body.assignees);
+    await applyAssignees(params.id, existing.titre, actor, previousAssigneeIds, newAssignees);
     return NextResponse.json({ ok: true });
   }
 
@@ -115,7 +116,7 @@ export async function PATCH(req, { params }) {
     return NextResponse.json({ error: "Statut invalide" }, { status: 400 });
   }
 
-  const canAct = admin || !existing.assigneeId || existing.assigneeId === actor.id;
+  const canAct = admin || existing.assignees.length === 0 || previousAssigneeIds.has(actor.id);
   if (!canAct) {
     return NextResponse.json({ error: "Cette tâche est assignée à quelqu'un d'autre" }, { status: 403 });
   }
@@ -132,11 +133,11 @@ export async function PATCH(req, { params }) {
       events: { create: { statut, userId: actor.id } },
       ...(commentaire ? { comments: { create: { texte: commentaire, userId: actor.id } } } : {}),
     },
-    include: { assignee: true, createdBy: true },
+    include: { assignees: true, createdBy: true },
   });
 
   const targets = new Map();
-  if (task.assignee && task.assignee.id !== actor.id) targets.set(task.assignee.id, task.assignee);
+  for (const a of task.assignees) if (a.id !== actor.id) targets.set(a.id, a);
   if (task.createdBy && task.createdBy.id !== actor.id) targets.set(task.createdBy.id, task.createdBy);
 
   const message = `${actor.name} a mis à jour « ${task.titre} » — ${STATUT_LABELS[statut]}`;

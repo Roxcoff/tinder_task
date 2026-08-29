@@ -35,7 +35,7 @@ model User {
   createdAt DateTime @default(now())
 
   tasksCreated      Task[]             @relation("createdBy")
-  tasksAssigned     Task[]             @relation("assignee")
+  tasksAssigned     Task[]             @relation("assignees")
   events            TaskEvent[]
   comments          Comment[]
   pushSubscriptions PushSubscription[]
@@ -63,8 +63,7 @@ model Task {
   notes       String?
   personnelle Boolean   @default(false)
   archived    Boolean   @default(false)
-  assigneeId  String?
-  assignee    User?     @relation("assignee", fields: [assigneeId], references: [id])
+  assignees   User[]    @relation("assignees")
   createdById String
   createdBy   User      @relation("createdBy", fields: [createdById], references: [id])
   createdAt   DateTime  @default(now())

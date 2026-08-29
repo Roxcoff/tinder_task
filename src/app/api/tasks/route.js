@@ -20,7 +20,7 @@ function serialize(task) {
     statut: task.statut,
     notes: task.notes || "",
     personnelle: task.personnelle,
-    assignee: task.assignee?.name || null,
+    assignees: (task.assignees || []).map((u) => u.name),
     creePar: task.createdBy?.name || "",
     creeLe: task.createdAt.toISOString(),
     demarreeLe: demarree ? demarree.le : null,
@@ -33,6 +33,15 @@ function serialize(task) {
   };
 }
 
+async function upsertUsers(names) {
+  const clean = [...new Set((names || []).map((n) => (n || "").trim()).filter(Boolean))];
+  const users = [];
+  for (const name of clean) {
+    users.push(await prisma.user.upsert({ where: { name }, update: {}, create: { name } }));
+  }
+  return users;
+}
+
 export async function GET() {
   const userId = getSessionUserId();
   if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -40,7 +49,7 @@ export async function GET() {
   const tasks = await prisma.task.findMany({
     where: { archived: false, OR: [{ personnelle: false }, { createdById: userId }] },
     include: {
-      assignee: true,
+      assignees: true,
       createdBy: true,
       events: { include: { user: true }, orderBy: { createdAt: "asc" } },
       comments: { include: { user: true }, orderBy: { createdAt: "asc" } },
@@ -66,14 +75,7 @@ export async function POST(req) {
   const actor = await prisma.user.findUnique({ where: { id: userId } });
   if (!actor) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  let assignee = null;
-  if (body.assignee && body.assignee.trim()) {
-    assignee = await prisma.user.upsert({
-      where: { name: body.assignee.trim() },
-      update: {},
-      create: { name: body.assignee.trim() },
-    });
-  }
+  const assignees = await upsertUsers(body.assignees);
 
   const task = await prisma.task.create({
     data: {
@@ -83,19 +85,20 @@ export async function POST(req) {
       echeance: body.echeance ? new Date(body.echeance) : null,
       notes: body.notes || "",
       personnelle: !!body.personnelle,
-      assigneeId: assignee?.id,
+      assignees: { connect: assignees.map((u) => ({ id: u.id })) },
       createdById: actor.id,
       events: { create: { statut: "a_demarrer", userId: actor.id } },
     },
     include: {
-      assignee: true,
+      assignees: true,
       createdBy: true,
       events: { include: { user: true } },
       comments: { include: { user: true } },
     },
   });
 
-  if (assignee && assignee.id !== actor.id) {
+  for (const assignee of assignees) {
+    if (assignee.id === actor.id) continue;
     const message = `${actor.name} vous a assigné « ${task.titre} »`;
     const notif = await prisma.notification.create({
       data: {

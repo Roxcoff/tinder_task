@@ -79,7 +79,7 @@ export async function GET(req) {
       notFound.push(match.titre);
       continue;
     }
-    await prisma.task.update({ where: { id: task.id }, data: { assigneeId: francine.id, notes } });
+    await prisma.task.update({ where: { id: task.id }, data: { assignees: { connect: { id: francine.id } }, notes } });
     updated.push(task.titre);
   }
 
@@ -93,7 +93,7 @@ export async function GET(req) {
         titre: NEW_TASK.titre,
         notes: NEW_TASK.notes,
         statut: "a_demarrer",
-        assigneeId: francine.id,
+        assignees: { connect: { id: francine.id } },
         createdById: francine.id,
         events: { create: { statut: "a_demarrer", userId: francine.id } },
       },
