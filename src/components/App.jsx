@@ -286,6 +286,18 @@ export default function App() {
     }
   }
 
+  async function deleteTask(taskId) {
+    if (!confirm("Supprimer définitivement cette tâche ? Cette action est irréversible : contrairement à l'archivage, l'historique et les commentaires seront perdus.")) return;
+    try {
+      await api(`/api/tasks/${taskId}`, { method: "DELETE" });
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      advanceQueue(taskId);
+      showToast("Tâche supprimée définitivement");
+    } catch (e) {
+      showToast(e.message || "Échec de la suppression");
+    }
+  }
+
   async function addTask(form) {
     try {
       const { task } = await api("/api/tasks", { method: "POST", body: JSON.stringify(form) });
@@ -384,6 +396,7 @@ export default function App() {
             onReassign={reassignTask}
             onEdit={setEditingTask}
             onArchive={archiveTask}
+            onDelete={deleteTask}
           />
         )}
         {view === "kpi" && <KpiView tasks={tasks} />}
@@ -758,7 +771,7 @@ function SwipeCard({ task, depth, interactive, locked, onSwipe, onBlockRequest, 
 /* ---------------------------------------------------------------------
    BOARD VIEW
 --------------------------------------------------------------------- */
-function BoardView({ tasks, collaborators, profile, canAct, onStatusChange, onAddComment, onReassign, onEdit, onArchive }) {
+function BoardView({ tasks, collaborators, profile, canAct, onStatusChange, onAddComment, onReassign, onEdit, onArchive, onDelete }) {
   const [progFilter, setProgFilter] = useState(new Set(Object.keys(PROGRAMMES)));
   const [assigneeFilter, setAssigneeFilter] = useState("Tous");
   const [openId, setOpenId] = useState(null);
@@ -823,6 +836,7 @@ function BoardView({ tasks, collaborators, profile, canAct, onStatusChange, onAd
                     onReassign={onReassign}
                     onEdit={onEdit}
                     onArchive={onArchive}
+                    onDelete={onDelete}
                   />
                 ))}
               </div>
@@ -834,7 +848,7 @@ function BoardView({ tasks, collaborators, profile, canAct, onStatusChange, onAd
   );
 }
 
-function BoardCard({ task, collaborators, canAct, canEdit, isAdmin, open, onToggle, onStatusChange, onAddComment, onReassign, onEdit, onArchive }) {
+function BoardCard({ task, collaborators, canAct, canEdit, isAdmin, open, onToggle, onStatusChange, onAddComment, onReassign, onEdit, onArchive, onDelete }) {
   const prog = PROGRAMMES[task.programme];
   const [commentText, setCommentText] = useState("");
 
@@ -885,8 +899,11 @@ function BoardCard({ task, collaborators, canAct, canEdit, isAdmin, open, onTogg
               <button type="button" className="pf-quick-btn" onClick={() => onEdit(task)}>
                 ✎ Modifier
               </button>
-              <button type="button" className="pf-quick-btn pf-quick-btn-danger" onClick={() => onArchive(task.id)}>
-                🗑 Archiver
+              <button type="button" className="pf-quick-btn" onClick={() => onArchive(task.id)}>
+                📦 Archiver
+              </button>
+              <button type="button" className="pf-quick-btn pf-quick-btn-danger" onClick={() => onDelete(task.id)}>
+                🗑 Supprimer
               </button>
             </div>
           )}

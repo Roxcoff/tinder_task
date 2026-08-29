@@ -15,6 +15,26 @@ async function notify(actor, targets, taskId, message) {
   }
 }
 
+export async function DELETE(req, { params }) {
+  const userId = getSessionUserId();
+  if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  const actor = await prisma.user.findUnique({ where: { id: userId } });
+  if (!actor) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const admin = isAdminName(actor.name);
+
+  const existing = await prisma.task.findUnique({ where: { id: params.id } });
+  if (!existing) return NextResponse.json({ error: "Tâche introuvable" }, { status: 404 });
+
+  const canEdit = admin || existing.createdById === actor.id;
+  if (!canEdit) {
+    return NextResponse.json({ error: "Seul le créateur ou un administrateur peut supprimer cette tâche" }, { status: 403 });
+  }
+
+  await prisma.task.delete({ where: { id: params.id } });
+  return NextResponse.json({ ok: true });
+}
+
 export async function PATCH(req, { params }) {
   const userId = getSessionUserId();
   if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
