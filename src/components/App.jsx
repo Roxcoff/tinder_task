@@ -399,7 +399,7 @@ export default function App() {
             onDelete={deleteTask}
           />
         )}
-        {view === "kpi" && <KpiView tasks={tasks} />}
+        {view === "kpi" && <KpiView tasks={tasks} collaborators={collaborators} profile={profile} />}
         {view === "notifs" && <NotifsView notifs={notifs} onOpen={markAllRead} />}
       </main>
 
@@ -962,28 +962,40 @@ function BoardCard({ task, collaborators, canAct, canEdit, isAdmin, open, onTogg
 /* ---------------------------------------------------------------------
    KPI VIEW
 --------------------------------------------------------------------- */
-function KpiView({ tasks }) {
-  const total = tasks.length;
-  const globalDone = tasks.filter((t) => t.statut === "termine").length;
-  const globalOverdue = tasks.filter((t) => dueUrgency(t.echeance, t.statut) === "overdue").length;
+function KpiView({ tasks, collaborators, profile }) {
+  const [assigneeFilter, setAssigneeFilter] = useState("Tous");
+  const filteredTasks = tasks.filter((t) => assigneeFilter === "Tous" || t.assignee === assigneeFilter);
+
+  const total = filteredTasks.length;
+  const globalDone = filteredTasks.filter((t) => t.statut === "termine").length;
+  const globalOverdue = filteredTasks.filter((t) => dueUrgency(t.echeance, t.statut) === "overdue").length;
 
   const parProgramme = Object.entries(PROGRAMMES).map(([key, prog]) => {
-    const items = tasks.filter((t) => t.programme === key);
+    const items = filteredTasks.filter((t) => t.programme === key);
     const parStatut = Object.fromEntries(Object.keys(STATUTS).map((s) => [s, items.filter((t) => t.statut === s).length]));
     const overdue = items.filter((t) => dueUrgency(t.echeance, t.statut) === "overdue").length;
     const pct = items.length ? Math.round((parStatut.termine / items.length) * 100) : 0;
     return { key, prog, total: items.length, parStatut, overdue, pct };
   });
 
-  const upcoming = tasks
+  const upcoming = filteredTasks
     .filter((t) => t.statut !== "termine" && t.echeance)
     .sort((a, b) => a.echeance.localeCompare(b.echeance));
 
   return (
     <div className="pf-kpi">
-      <a className="pf-btn pf-btn-primary pf-kpi-export" href="/api/export/xlsx">
-        ⬇ Exporter en Excel
-      </a>
+      <div className="pf-kpi-toolbar">
+        <select className="pf-select" value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)}>
+          <option>Tous</option>
+          {profile?.name && !collaborators.includes(profile.name) && <option>{profile.name}</option>}
+          {collaborators.map((c) => (
+            <option key={c}>{c}</option>
+          ))}
+        </select>
+        <a className="pf-btn pf-btn-primary pf-kpi-export" href="/api/export/xlsx">
+          ⬇ Exporter en Excel
+        </a>
+      </div>
       <div className="pf-kpi-summary">
         <div className="pf-kpi-tile">
           <div className="pf-kpi-value">{total}</div>
