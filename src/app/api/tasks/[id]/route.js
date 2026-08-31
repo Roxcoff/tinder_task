@@ -3,8 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUserId } from "@/lib/session";
 import { sendPushToUser } from "@/lib/push";
 import { isAdminName } from "@/lib/admin";
-
-const STATUT_LABELS = { a_demarrer: "À démarrer", en_cours: "En cours", bloque: "Bloqué", termine: "Terminé" };
+import { STATUT_LABELS, queueStatusNotification } from "@/lib/statusNotify";
 
 async function notify(actor, targets, taskId, message) {
   for (const target of targets.values()) {
@@ -142,6 +141,7 @@ export async function PATCH(req, { params }) {
 
   const message = `${actor.name} a mis à jour « ${task.titre} » — ${STATUT_LABELS[statut]}`;
   await notify(actor, targets, task.id, message);
+  await queueStatusNotification(prisma, task.id, statut, actor.id);
 
   return NextResponse.json({ ok: true });
 }

@@ -42,6 +42,7 @@ model User {
   pushSubscriptions PushSubscription[]
   notificationsSent Notification[]     @relation("from")
   notificationsRecv Notification[]     @relation("to")
+  pendingStatusNotifications PendingStatusNotification[]
 }
 
 model PushSubscription {
@@ -72,6 +73,7 @@ model Task {
   events        TaskEvent[]
   comments      Comment[]
   notifications Notification[]
+  pendingStatusNotifications PendingStatusNotification[]
 }
 
 model Comment {
@@ -106,4 +108,20 @@ model Notification {
   fromUser   User             @relation("from", fields: [fromUserId], references: [id])
   createdAt  DateTime         @default(now())
   readAt     DateTime?
+}
+
+// Un changement de statut ne notifie immédiatement que les personnes déjà
+// impliquées (assignés, créateur). Pour les autres utilisateurs, on
+// n'envoie une notification que si le statut n'a pas été modifié à nouveau
+// dans les 30 minutes qui suivent (voir src/lib/statusNotify.js) — cela
+// évite de notifier tout le monde en cas d'erreur de manipulation corrigée
+// rapidement.
+model PendingStatusNotification {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  statut    Statut
+  actorId   String
+  actor     User     @relation(fields: [actorId], references: [id])
+  createdAt DateTime @default(now())
 }

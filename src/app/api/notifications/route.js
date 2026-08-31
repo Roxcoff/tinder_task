@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUserId } from "@/lib/session";
+import { flushDueStatusNotifications } from "@/lib/statusNotify";
 
 export async function GET() {
   const userId = getSessionUserId();
   if (!userId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  await flushDueStatusNotifications(prisma).catch((e) => console.error("flushDueStatusNotifications:", e));
 
   const notifs = await prisma.notification.findMany({
     where: { toUserId: userId },
