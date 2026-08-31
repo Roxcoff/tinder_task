@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { setSessionCookie } from "@/lib/session";
 import { isAdminName } from "@/lib/admin";
+import { getAccessCode } from "@/lib/settings";
 
 export async function POST(req) {
   const body = await req.json().catch(() => ({}));
@@ -11,7 +12,8 @@ export async function POST(req) {
   if (!name) {
     return NextResponse.json({ error: "Nom requis" }, { status: 400 });
   }
-  if (process.env.ACCESS_CODE && code !== process.env.ACCESS_CODE) {
+  const requiredCode = await getAccessCode(prisma);
+  if (requiredCode && code !== requiredCode) {
     return NextResponse.json({ error: "Code d'accès invalide" }, { status: 401 });
   }
 

@@ -130,3 +130,12 @@ model PendingStatusNotification {
   actor     User     @relation(fields: [actorId], references: [id])
   createdAt DateTime @default(now())
 }
+
+// Ligne unique (id fixe "singleton") pour les paramètres globaux gérés par
+// un admin depuis l'application, sans passer par les variables d'env
+// Vercel. accessCode remplace/complète process.env.ACCESS_CODE quand il
+// est renseigné (voir /api/auth/login).
+model Setting {
+  id         String  @id @default("singleton")
+  accessCode String?
+}

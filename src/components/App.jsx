@@ -128,7 +128,7 @@ export default function App() {
   const [notifs, setNotifs] = useState([]);
   const [collaborators, setCollaborators] = useState([]);
   const [assignableCollaborators, setAssignableCollaborators] = useState([]);
-  const [showManagePeople, setShowManagePeople] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [view, setView] = useState("deck");
   const [deckScope, setDeckScope] = useState("all");
   const [queue, setQueue] = useState([]);
@@ -371,7 +371,7 @@ export default function App() {
         onLogout={handleLogout}
         notifPermission={notifPermission}
         requestNotifPermission={requestNotifPermission}
-        onManagePeople={() => setShowManagePeople(true)}
+        onManagePeople={() => setShowAdminPanel(true)}
       />
 
       <main className="pf-main">
@@ -439,8 +439,8 @@ export default function App() {
         />
       )}
 
-      {showManagePeople && (
-        <ManagePeopleModal onClose={() => setShowManagePeople(false)} onChanged={refreshCollaborators} />
+      {showAdminPanel && (
+        <AdminPanelModal onClose={() => setShowAdminPanel(false)} onChanged={refreshCollaborators} />
       )}
 
       {toast && <div className="pf-toast">{toast}</div>}
@@ -509,8 +509,8 @@ function Header({ profile, view, setView, unread, onLogout, notifPermission, req
         </div>
         <div className="pf-header-actions">
           {profile.isAdmin && (
-            <button className="pf-people-btn" onClick={onManagePeople} title="Gérer les personnes assignables">
-              👥
+            <button className="pf-people-btn" onClick={onManagePeople} title="Administration">
+              ⚙
             </button>
           )}
           <button className="pf-who" onClick={onLogout} title="Se déconnecter">
@@ -807,10 +807,21 @@ function SwipeCard({ task, depth, interactive, locked, onSwipe, onBlockRequest, 
 /* ---------------------------------------------------------------------
    BOARD VIEW
 --------------------------------------------------------------------- */
+// Colonnes dans l'ordre du flux normal, "Bloqué" en dernier — c'est une
+// voie de sortie exceptionnelle, elle ne doit pas couper le trajet
+// intuitif à démarrer → en cours → terminé.
+const BOARD_COLUMNS = ["a_demarrer", "en_cours", "termine", "bloque"];
+
 function BoardView({ tasks, collaborators, profile, canAct, onStatusChange, onAddComment, onEdit, onArchive, onDelete }) {
   const [progFilter, setProgFilter] = useState(new Set(Object.keys(PROGRAMMES)));
   const [assigneeFilter, setAssigneeFilter] = useState("Tous");
   const [openId, setOpenId] = useState(null);
+  const [dragEnabled, setDragEnabled] = useState(false);
+  const [dragOverCol, setDragOverCol] = useState(null);
+
+  useEffect(() => {
+    setDragEnabled(typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches);
+  }, []);
 
   const toggleProg = (k) => {
     setProgFilter((s) => {
@@ -821,7 +832,13 @@ function BoardView({ tasks, collaborators, profile, canAct, onStatusChange, onAd
   };
 
   const filtered = tasks.filter((t) => progFilter.has(t.programme) && (assigneeFilter === "Tous" || (t.assignees || []).includes(assigneeFilter)));
-  const columns = ["a_demarrer", "en_cours", "bloque", "termine"];
+
+  const dropOnColumn = (col) => (e) => {
+    e.preventDefault();
+    setDragOverCol(null);
+    const taskId = e.dataTransfer.getData("text/plain");
+    if (taskId) onStatusChange(taskId, col);
+  };
 
   return (
     <div className="pf-board">
@@ -846,11 +863,19 @@ function BoardView({ tasks, collaborators, profile, canAct, onStatusChange, onAd
         </select>
       </div>
 
+      {dragEnabled && <p className="pf-board-hint">Glissez une tâche vers une autre colonne pour changer son statut.</p>}
+
       <div className="pf-columns">
-        {columns.map((col) => {
+        {BOARD_COLUMNS.map((col) => {
           const items = filtered.filter((t) => t.statut === col).sort((a, b) => (a.echeance || "").localeCompare(b.echeance || ""));
           return (
-            <div className="pf-col" key={col}>
+            <div
+              className={"pf-col" + (dragEnabled && dragOverCol === col ? " pf-col-dragover" : "")}
+              key={col}
+              onDragOver={dragEnabled ? (e) => { e.preventDefault(); if (dragOverCol !== col) setDragOverCol(col); } : undefined}
+              onDragLeave={dragEnabled ? () => setDragOverCol((c) => (c === col ? null : c)) : undefined}
+              onDrop={dragEnabled ? dropOnColumn(col) : undefined}
+            >
               <div className="pf-col-head" style={{ borderColor: STATUTS[col].color }}>
                 <span>{STATUTS[col].label}</span>
                 <span className="pf-col-count">{items.length}</span>
@@ -870,6 +895,7 @@ function BoardView({ tasks, collaborators, profile, canAct, onStatusChange, onAd
                     onEdit={onEdit}
                     onArchive={onArchive}
                     onDelete={onDelete}
+                    draggable={dragEnabled}
                   />
                 ))}
               </div>
@@ -881,9 +907,10 @@ function BoardView({ tasks, collaborators, profile, canAct, onStatusChange, onAd
   );
 }
 
-function BoardCard({ task, canAct, canEdit, open, onToggle, onStatusChange, onAddComment, onEdit, onArchive, onDelete }) {
+function BoardCard({ task, canAct, canEdit, open, onToggle, onStatusChange, onAddComment, onEdit, onArchive, onDelete, draggable }) {
   const prog = PROGRAMMES[task.programme];
   const [commentText, setCommentText] = useState("");
+  const canDrag = draggable && canAct;
 
   const submitComment = (e) => {
     e.preventDefault();
@@ -894,7 +921,12 @@ function BoardCard({ task, canAct, canEdit, open, onToggle, onStatusChange, onAd
   };
 
   return (
-    <div className="pf-bcard" style={{ borderLeftColor: prog.color }}>
+    <div
+      className={"pf-bcard" + (canDrag ? " pf-bcard-draggable" : "")}
+      style={{ borderLeftColor: prog.color }}
+      draggable={canDrag}
+      onDragStart={canDrag ? (e) => { e.dataTransfer.setData("text/plain", task.id); e.dataTransfer.effectAllowed = "move"; } : undefined}
+    >
       <div className="pf-bcard-head" onClick={onToggle}>
         <div>
           <div className="pf-bcard-chantier">
@@ -1051,74 +1083,78 @@ function CalendarView({ tasks, collaborators, profile }) {
         </button>
       </div>
 
-      <div className="pf-cal-card">
-        <div className="pf-cal-nav">
-          <button type="button" className="pf-cal-navbtn" onClick={prevMonth} aria-label="Mois précédent">‹</button>
-          <span className="pf-cal-monthlabel">{MONTHS_FR[cursor.month]} {cursor.year}</span>
-          <button type="button" className="pf-cal-navbtn" onClick={nextMonth} aria-label="Mois suivant">›</button>
-        </div>
-        <div className="pf-cal-weekdays">
-          {WEEKDAYS_FR.map((w, i) => (
-            <span key={i}>{w}</span>
-          ))}
-        </div>
-        <div className="pf-cal-grid">
-          {cells.map((d, i) => {
-            if (d === null) return <div key={i} className="pf-cal-day pf-cal-day-empty" />;
-            const dateStr = ymd(cursor.year, cursor.month, d);
-            const items = tasksByDay[dateStr] || [];
-            const isToday = dateStr === todayStr;
-            const isSelected = dateStr === selectedDay;
-            const isPast = dateStr < todayStr;
-            const hasPending = items.some((t) => t.statut !== "termine");
-            const dayClass =
-              "pf-cal-day" +
-              (isToday ? " pf-cal-day-today" : "") +
-              (isSelected ? " pf-cal-day-selected" : "") +
-              (isPast && hasPending ? " pf-cal-day-overdue" : "");
-            return (
-              <button type="button" key={i} className={dayClass} onClick={() => setSelectedDay(isSelected ? null : dateStr)}>
-                <span className="pf-cal-day-num">{d}</span>
-                {items.length > 0 && (
-                  <span className="pf-cal-day-dots">
-                    {items.slice(0, 4).map((t, j) => (
-                      <i key={j} className="pf-cal-dot" style={{ background: PROGRAMMES[t.programme].color }} />
-                    ))}
-                    {items.length > 4 && <span className="pf-cal-day-more">+{items.length - 4}</span>}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {selectedDay && (
-        <div className="pf-kpi-card">
-          <div className="pf-kpi-card-head">
-            <span className="pf-kpi-prog-title">📅 {formatDateLong(selectedDay)}</span>
-            <button type="button" className="pf-kpi-linklike" onClick={() => setSelectedDay(null)}>
-              ✕ Fermer
-            </button>
+      <div className="pf-cal-layout">
+        <div className="pf-cal-card">
+          <div className="pf-cal-nav">
+            <button type="button" className="pf-cal-navbtn" onClick={prevMonth} aria-label="Mois précédent">‹</button>
+            <span className="pf-cal-monthlabel">{MONTHS_FR[cursor.month]} {cursor.year}</span>
+            <button type="button" className="pf-cal-navbtn" onClick={nextMonth} aria-label="Mois suivant">›</button>
           </div>
-          {dayTasks.length === 0 ? (
-            <p className="pf-empty-sub" style={{ margin: 0 }}>Aucune tâche à cette date.</p>
-          ) : (
-            <KpiTaskList tasks={dayTasks} />
-          )}
+          <div className="pf-cal-weekdays">
+            {WEEKDAYS_FR.map((w, i) => (
+              <span key={i}>{w}</span>
+            ))}
+          </div>
+          <div className="pf-cal-grid">
+            {cells.map((d, i) => {
+              if (d === null) return <div key={i} className="pf-cal-day pf-cal-day-empty" />;
+              const dateStr = ymd(cursor.year, cursor.month, d);
+              const items = tasksByDay[dateStr] || [];
+              const isToday = dateStr === todayStr;
+              const isSelected = dateStr === selectedDay;
+              const isPast = dateStr < todayStr;
+              const hasPending = items.some((t) => t.statut !== "termine");
+              const dayClass =
+                "pf-cal-day" +
+                (isToday ? " pf-cal-day-today" : "") +
+                (isSelected ? " pf-cal-day-selected" : "") +
+                (isPast && hasPending ? " pf-cal-day-overdue" : "");
+              return (
+                <button type="button" key={i} className={dayClass} onClick={() => setSelectedDay(isSelected ? null : dateStr)}>
+                  <span className="pf-cal-day-num">{d}</span>
+                  {items.length > 0 && (
+                    <span className="pf-cal-day-dots">
+                      {items.slice(0, 4).map((t, j) => (
+                        <i key={j} className="pf-cal-dot" style={{ background: PROGRAMMES[t.programme].color }} />
+                      ))}
+                      {items.length > 4 && <span className="pf-cal-day-more">+{items.length - 4}</span>}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      )}
 
-      <div className="pf-kpi-card">
-        <div className="pf-kpi-card-head">
-          <span className="pf-kpi-prog-title">🎯 Priorités par échéance</span>
-          <span className="pf-kpi-pct">{upcoming.length} tâche{upcoming.length > 1 ? "s" : ""}</span>
+        <div className="pf-cal-side">
+          {selectedDay && (
+            <div className="pf-kpi-card">
+              <div className="pf-kpi-card-head">
+                <span className="pf-kpi-prog-title">📅 {formatDateLong(selectedDay)}</span>
+                <button type="button" className="pf-kpi-linklike" onClick={() => setSelectedDay(null)}>
+                  ✕ Fermer
+                </button>
+              </div>
+              {dayTasks.length === 0 ? (
+                <p className="pf-empty-sub" style={{ margin: 0 }}>Aucune tâche à cette date.</p>
+              ) : (
+                <KpiTaskList tasks={dayTasks} />
+              )}
+            </div>
+          )}
+
+          <div className="pf-kpi-card">
+            <div className="pf-kpi-card-head">
+              <span className="pf-kpi-prog-title">🎯 Priorités par échéance</span>
+              <span className="pf-kpi-pct">{upcoming.length} tâche{upcoming.length > 1 ? "s" : ""}</span>
+            </div>
+            {upcoming.length === 0 ? (
+              <p className="pf-empty-sub" style={{ margin: 0 }}>Rien à l'horizon — aucune échéance en attente.</p>
+            ) : (
+              <KpiTaskList tasks={upcoming} />
+            )}
+          </div>
         </div>
-        {upcoming.length === 0 ? (
-          <p className="pf-empty-sub" style={{ margin: 0 }}>Rien à l'horizon — aucune échéance en attente.</p>
-        ) : (
-          <KpiTaskList tasks={upcoming} />
-        )}
       </div>
     </div>
   );
@@ -1246,30 +1282,32 @@ function KpiView({ tasks, collaborators, profile }) {
         )}
       </div>
 
-      {parProgramme.map(({ key, prog, total, parStatut, overdue, pct }) => (
-        <div className="pf-kpi-card" key={key}>
-          <div className="pf-kpi-card-head">
-            <span className="pf-kpi-prog" style={{ color: prog.color, background: prog.tint }}>{prog.label}</span>
-            <button type="button" className="pf-kpi-pct pf-kpi-linklike" onClick={() => toggleKpiFilter({ type: "done", programme: key })}>
-              {pct}% terminé
-            </button>
-          </div>
-          <div className="pf-kpi-bar">
-            <div className="pf-kpi-bar-fill" style={{ width: pct + "%", background: prog.color }} />
-          </div>
-          <div className="pf-kpi-stats">
-            <span><i className="pf-dot" style={{ background: STATUTS.a_demarrer.color }} /> {parStatut.a_demarrer} à démarrer</span>
-            <span><i className="pf-dot" style={{ background: STATUTS.en_cours.color }} /> {parStatut.en_cours} en cours</span>
-            <span><i className="pf-dot" style={{ background: STATUTS.bloque.color }} /> {parStatut.bloque} bloquées</span>
-            <span><i className="pf-dot" style={{ background: STATUTS.termine.color }} /> {parStatut.termine} terminées</span>
-            {overdue > 0 && (
-              <button type="button" className="pf-kpi-overdue pf-kpi-linklike" onClick={() => toggleKpiFilter({ type: "overdue", programme: key })}>
-                ⚠ {overdue} en retard
+      <div className="pf-kpi-programs">
+        {parProgramme.map(({ key, prog, total, parStatut, overdue, pct }) => (
+          <div className="pf-kpi-card" key={key}>
+            <div className="pf-kpi-card-head">
+              <span className="pf-kpi-prog" style={{ color: prog.color, background: prog.tint }}>{prog.label}</span>
+              <button type="button" className="pf-kpi-pct pf-kpi-linklike" onClick={() => toggleKpiFilter({ type: "done", programme: key })}>
+                {pct}% terminé
               </button>
-            )}
+            </div>
+            <div className="pf-kpi-bar">
+              <div className="pf-kpi-bar-fill" style={{ width: pct + "%", background: prog.color }} />
+            </div>
+            <div className="pf-kpi-stats">
+              <span><i className="pf-dot" style={{ background: STATUTS.a_demarrer.color }} /> {parStatut.a_demarrer} à démarrer</span>
+              <span><i className="pf-dot" style={{ background: STATUTS.en_cours.color }} /> {parStatut.en_cours} en cours</span>
+              <span><i className="pf-dot" style={{ background: STATUTS.bloque.color }} /> {parStatut.bloque} bloquées</span>
+              <span><i className="pf-dot" style={{ background: STATUTS.termine.color }} /> {parStatut.termine} terminées</span>
+              {overdue > 0 && (
+                <button type="button" className="pf-kpi-overdue pf-kpi-linklike" onClick={() => toggleKpiFilter({ type: "overdue", programme: key })}>
+                  ⚠ {overdue} en retard
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -1355,7 +1393,34 @@ function BlockReasonModal({ onClose, onSubmit }) {
 /* ---------------------------------------------------------------------
    MANAGE PEOPLE (admin)
 --------------------------------------------------------------------- */
-function ManagePeopleModal({ onClose, onChanged }) {
+function AdminPanelModal({ onClose, onChanged }) {
+  const [tab, setTab] = useState("people");
+
+  return (
+    <div className="pf-modal-backdrop" onMouseDown={onClose}>
+      <div className="pf-modal" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="pf-modal-eyebrow">ADMINISTRATION</div>
+        <h2 className="pf-modal-title">Paramètres de l'organisation</h2>
+        <div className="pf-admin-tabs">
+          <button type="button" className={"pf-admin-tab" + (tab === "people" ? " active" : "")} onClick={() => setTab("people")}>
+            Personnes
+          </button>
+          <button type="button" className={"pf-admin-tab" + (tab === "settings" ? " active" : "")} onClick={() => setTab("settings")}>
+            Paramètres
+          </button>
+        </div>
+        {tab === "people" ? <AdminPeopleTab onChanged={onChanged} /> : <AdminSettingsTab />}
+        <div className="pf-modal-actions">
+          <button type="button" className="pf-btn pf-btn-outline" onClick={onClose}>
+            Fermer
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminPeopleTab({ onChanged }) {
   const [people, setPeople] = useState(null);
   const [newName, setNewName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1423,60 +1488,135 @@ function ManagePeopleModal({ onClose, onChanged }) {
   };
 
   return (
-    <div className="pf-modal-backdrop" onMouseDown={onClose}>
-      <div className="pf-modal" onMouseDown={(e) => e.stopPropagation()}>
-        <div className="pf-modal-eyebrow">ADMINISTRATION</div>
-        <h2 className="pf-modal-title">Personnes assignables</h2>
-        <p className="pf-empty-sub" style={{ marginTop: -6, marginBottom: 14 }}>
-          Seules les personnes marquées « assignable » apparaissent dans le sélecteur d'assignation des tâches. Se
-          connecter à l'appli ne suffit pas à y figurer.
-        </p>
-        {error && <p style={{ color: "var(--red)", fontSize: 12.5, marginBottom: 10 }}>{error}</p>}
-        {!people ? (
-          <p className="pf-empty-sub">Chargement…</p>
-        ) : (
-          <div className="pf-people-list">
-            {people.map((u) => (
-              <div className="pf-people-row" key={u.id}>
-                <span className="pf-people-name">
-                  {u.name}
-                  {u.isAdmin && <span className="pf-badge pf-badge-admin">ADMIN</span>}
-                </span>
-                <span className="pf-people-actions">
-                  <button type="button" className="pf-quick-btn" disabled={busy} onClick={() => rename(u)}>
-                    ✎ Renommer
-                  </button>
-                  <button
-                    type="button"
-                    className={"pf-quick-btn" + (u.assignable ? " pf-quick-btn-on" : "")}
-                    disabled={busy}
-                    onClick={() => toggleAssignable(u)}
-                  >
-                    {u.assignable ? "✓ Assignable" : "Masquée"}
-                  </button>
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-        <form className="pf-comment-form" onSubmit={addPerson} style={{ marginTop: 14 }}>
-          <input
-            className="pf-input"
-            placeholder="Ajouter une personne…"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-          />
-          <button className="pf-btn pf-btn-primary pf-btn-sm" type="submit" disabled={busy || !newName.trim()}>
-            Ajouter
-          </button>
-        </form>
-        <div className="pf-modal-actions">
-          <button type="button" className="pf-btn pf-btn-outline" onClick={onClose}>
-            Fermer
+    <>
+      <p className="pf-empty-sub" style={{ marginTop: 4, marginBottom: 14 }}>
+        Seules les personnes marquées « assignable » apparaissent dans le sélecteur d'assignation des tâches. Se
+        connecter à l'appli ne suffit pas à y figurer.
+      </p>
+      {error && <p style={{ color: "var(--red)", fontSize: 12.5, marginBottom: 10 }}>{error}</p>}
+      {!people ? (
+        <p className="pf-empty-sub">Chargement…</p>
+      ) : (
+        <div className="pf-people-list">
+          {people.map((u) => (
+            <div className="pf-people-row" key={u.id}>
+              <span className="pf-people-name">
+                {u.name}
+                {u.isAdmin && <span className="pf-badge pf-badge-admin">ADMIN</span>}
+              </span>
+              <span className="pf-people-actions">
+                <button type="button" className="pf-quick-btn" disabled={busy} onClick={() => rename(u)}>
+                  ✎ Renommer
+                </button>
+                <button
+                  type="button"
+                  className={"pf-quick-btn" + (u.assignable ? " pf-quick-btn-on" : "")}
+                  disabled={busy}
+                  onClick={() => toggleAssignable(u)}
+                >
+                  {u.assignable ? "✓ Assignable" : "Masquée"}
+                </button>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      <form className="pf-comment-form" onSubmit={addPerson} style={{ marginTop: 14 }}>
+        <input
+          className="pf-input"
+          placeholder="Ajouter une personne…"
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+        />
+        <button className="pf-btn pf-btn-primary pf-btn-sm" type="submit" disabled={busy || !newName.trim()}>
+          Ajouter
+        </button>
+      </form>
+    </>
+  );
+}
+
+function AdminSettingsTab() {
+  const [settings, setSettings] = useState(null);
+  const [codeInput, setCodeInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await api("/api/admin/settings");
+        setSettings(data);
+        setCodeInput(data.accessCode || "");
+      } catch (e) {
+        setError(e.message || "Erreur de chargement");
+      }
+    })();
+  }, []);
+
+  const save = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    setSaved(false);
+    try {
+      const data = await api("/api/admin/settings", { method: "PATCH", body: JSON.stringify({ accessCode: codeInput.trim() }) });
+      setSettings((s) => ({ ...s, accessCode: data.accessCode }));
+      setSaved(true);
+    } catch (e) {
+      setError(e.message || "Échec de l'enregistrement");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const clear = async () => {
+    setBusy(true);
+    setError("");
+    setSaved(false);
+    try {
+      const data = await api("/api/admin/settings", { method: "PATCH", body: JSON.stringify({ accessCode: null }) });
+      setSettings((s) => ({ ...s, accessCode: data.accessCode }));
+      setCodeInput("");
+      setSaved(true);
+    } catch (e) {
+      setError(e.message || "Échec de la réinitialisation");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!settings) return <p className="pf-empty-sub">Chargement…</p>;
+
+  return (
+    <>
+      <p className="pf-empty-sub" style={{ marginTop: 4, marginBottom: 14 }}>
+        Code demandé à toute nouvelle connexion, en plus du nom. Laissez le champ vide pour n'exiger aucun code.
+        {settings.accessCode === null && settings.accessCodeFromEnv && " Actuellement défini via la configuration Vercel (ACCESS_CODE)."}
+      </p>
+      {error && <p style={{ color: "var(--red)", fontSize: 12.5, marginBottom: 10 }}>{error}</p>}
+      {saved && !error && <p style={{ color: "var(--emerald)", fontSize: 12.5, marginBottom: 10 }}>Enregistré.</p>}
+      <form onSubmit={save}>
+        <label className="pf-label">Code d'accès de l'organisation</label>
+        <input
+          className="pf-input"
+          placeholder="ex. MKD2026"
+          value={codeInput}
+          onChange={(e) => setCodeInput(e.target.value)}
+        />
+        <div className="pf-modal-actions" style={{ marginTop: 14 }}>
+          {settings.accessCode !== null && (
+            <button type="button" className="pf-btn pf-btn-outline" disabled={busy} onClick={clear}>
+              Revenir au défaut
+            </button>
+          )}
+          <button type="submit" className="pf-btn pf-btn-primary" disabled={busy}>
+            Enregistrer
           </button>
         </div>
-      </div>
-    </div>
+      </form>
+    </>
   );
 }
 
