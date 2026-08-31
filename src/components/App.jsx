@@ -391,6 +391,7 @@ export default function App() {
             onDelete={deleteTask}
           />
         )}
+        {view === "calendar" && <CalendarView tasks={tasks} collaborators={collaborators} profile={profile} />}
         {view === "kpi" && <KpiView tasks={tasks} collaborators={collaborators} profile={profile} />}
         {view === "notifs" && <NotifsView notifs={notifs} onOpen={markAllRead} />}
       </main>
@@ -500,6 +501,9 @@ function Header({ profile, view, setView, unread, onLogout, notifPermission, req
         </button>
         <button className={"pf-tab" + (view === "board" ? " active" : "")} onClick={() => setView("board")}>
           Tableau
+        </button>
+        <button className={"pf-tab" + (view === "calendar" ? " active" : "")} onClick={() => setView("calendar")}>
+          Calendrier
         </button>
         <button className={"pf-tab" + (view === "kpi" ? " active" : "")} onClick={() => setView("kpi")}>
           Suivi
@@ -934,6 +938,154 @@ function BoardCard({ task, canAct, canEdit, open, onToggle, onStatusChange, onAd
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------
+   CALENDAR VIEW
+--------------------------------------------------------------------- */
+const WEEKDAYS_FR = ["L", "M", "M", "J", "V", "S", "D"];
+const MONTHS_FR = [
+  "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+  "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
+];
+
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+function ymd(year, month, day) {
+  return `${year}-${pad2(month + 1)}-${pad2(day)}`;
+}
+function monthCells(year, month) {
+  const startOffset = (new Date(year, month, 1).getDay() + 6) % 7;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < startOffset; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+  return cells;
+}
+
+function CalendarView({ tasks, collaborators, profile }) {
+  const [assigneeFilter, setAssigneeFilter] = useState(profile?.name || "Tous");
+  const [cursor, setCursor] = useState(() => {
+    const d = new Date();
+    return { year: d.getFullYear(), month: d.getMonth() };
+  });
+  const [selectedDay, setSelectedDay] = useState(null);
+
+  const filteredTasks = tasks.filter((t) => assigneeFilter === "Tous" || (t.assignees || []).includes(assigneeFilter));
+
+  const now = new Date();
+  const todayStr = ymd(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const tasksByDay = {};
+  for (const t of filteredTasks) {
+    if (!t.echeance) continue;
+    (tasksByDay[t.echeance] ||= []).push(t);
+  }
+
+  const cells = monthCells(cursor.year, cursor.month);
+
+  const upcoming = filteredTasks
+    .filter((t) => t.statut !== "termine" && t.echeance)
+    .sort((a, b) => a.echeance.localeCompare(b.echeance));
+
+  const dayTasks = selectedDay ? (tasksByDay[selectedDay] || []).slice().sort((a, b) => a.titre.localeCompare(b.titre)) : null;
+
+  const goToday = () => {
+    const d = new Date();
+    setCursor({ year: d.getFullYear(), month: d.getMonth() });
+    setSelectedDay(todayStr);
+  };
+  const prevMonth = () => setCursor((c) => (c.month === 0 ? { year: c.year - 1, month: 11 } : { year: c.year, month: c.month - 1 }));
+  const nextMonth = () => setCursor((c) => (c.month === 11 ? { year: c.year + 1, month: 0 } : { year: c.year, month: c.month + 1 }));
+
+  return (
+    <div className="pf-cal">
+      <div className="pf-kpi-toolbar">
+        <select className="pf-select" value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)}>
+          <option>Tous</option>
+          {profile?.name && !collaborators.includes(profile.name) && <option>{profile.name}</option>}
+          {collaborators.map((c) => (
+            <option key={c}>{c}</option>
+          ))}
+        </select>
+        <button type="button" className="pf-btn pf-btn-outline" onClick={goToday}>
+          Aujourd'hui
+        </button>
+      </div>
+
+      <div className="pf-cal-card">
+        <div className="pf-cal-nav">
+          <button type="button" className="pf-cal-navbtn" onClick={prevMonth} aria-label="Mois précédent">‹</button>
+          <span className="pf-cal-monthlabel">{MONTHS_FR[cursor.month]} {cursor.year}</span>
+          <button type="button" className="pf-cal-navbtn" onClick={nextMonth} aria-label="Mois suivant">›</button>
+        </div>
+        <div className="pf-cal-weekdays">
+          {WEEKDAYS_FR.map((w, i) => (
+            <span key={i}>{w}</span>
+          ))}
+        </div>
+        <div className="pf-cal-grid">
+          {cells.map((d, i) => {
+            if (d === null) return <div key={i} className="pf-cal-day pf-cal-day-empty" />;
+            const dateStr = ymd(cursor.year, cursor.month, d);
+            const items = tasksByDay[dateStr] || [];
+            const isToday = dateStr === todayStr;
+            const isSelected = dateStr === selectedDay;
+            const isPast = dateStr < todayStr;
+            const hasPending = items.some((t) => t.statut !== "termine");
+            const dayClass =
+              "pf-cal-day" +
+              (isToday ? " pf-cal-day-today" : "") +
+              (isSelected ? " pf-cal-day-selected" : "") +
+              (isPast && hasPending ? " pf-cal-day-overdue" : "");
+            return (
+              <button type="button" key={i} className={dayClass} onClick={() => setSelectedDay(isSelected ? null : dateStr)}>
+                <span className="pf-cal-day-num">{d}</span>
+                {items.length > 0 && (
+                  <span className="pf-cal-day-dots">
+                    {items.slice(0, 4).map((t, j) => (
+                      <i key={j} className="pf-cal-dot" style={{ background: PROGRAMMES[t.programme].color }} />
+                    ))}
+                    {items.length > 4 && <span className="pf-cal-day-more">+{items.length - 4}</span>}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {selectedDay && (
+        <div className="pf-kpi-card">
+          <div className="pf-kpi-card-head">
+            <span className="pf-kpi-prog-title">📅 {formatDateLong(selectedDay)}</span>
+            <button type="button" className="pf-kpi-linklike" onClick={() => setSelectedDay(null)}>
+              ✕ Fermer
+            </button>
+          </div>
+          {dayTasks.length === 0 ? (
+            <p className="pf-empty-sub" style={{ margin: 0 }}>Aucune tâche à cette date.</p>
+          ) : (
+            <KpiTaskList tasks={dayTasks} />
+          )}
+        </div>
+      )}
+
+      <div className="pf-kpi-card">
+        <div className="pf-kpi-card-head">
+          <span className="pf-kpi-prog-title">🎯 Priorités par échéance</span>
+          <span className="pf-kpi-pct">{upcoming.length} tâche{upcoming.length > 1 ? "s" : ""}</span>
+        </div>
+        {upcoming.length === 0 ? (
+          <p className="pf-empty-sub" style={{ margin: 0 }}>Rien à l'horizon — aucune échéance en attente.</p>
+        ) : (
+          <KpiTaskList tasks={upcoming} />
+        )}
+      </div>
     </div>
   );
 }
