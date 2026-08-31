@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUserId } from "@/lib/session";
 import { sendPushToUser } from "@/lib/push";
+import { isAdminName } from "@/lib/admin";
 
 function serialize(task) {
   const historique = (task.events || []).map((e) => ({
@@ -33,11 +34,20 @@ function serialize(task) {
   };
 }
 
-async function upsertUsers(names) {
+// Une nouvelle personne devient assignable uniquement quand c'est un admin
+// qui l'assigne explicitement — se contenter de taper un nom ici ne suffit
+// pas à polluer la liste d'assignation pour tout le monde.
+async function upsertUsers(names, { markAssignable = false } = {}) {
   const clean = [...new Set((names || []).map((n) => (n || "").trim()).filter(Boolean))];
   const users = [];
   for (const name of clean) {
-    users.push(await prisma.user.upsert({ where: { name }, update: {}, create: { name } }));
+    users.push(
+      await prisma.user.upsert({
+        where: { name },
+        update: markAssignable ? { assignable: true } : {},
+        create: markAssignable ? { name, assignable: true } : { name },
+      })
+    );
   }
   return users;
 }
@@ -75,7 +85,7 @@ export async function POST(req) {
   const actor = await prisma.user.findUnique({ where: { id: userId } });
   if (!actor) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const assignees = await upsertUsers(body.assignees);
+  const assignees = await upsertUsers(body.assignees, { markAssignable: isAdminName(actor.name) });
 
   const task = await prisma.task.create({
     data: {

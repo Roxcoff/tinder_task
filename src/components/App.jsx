@@ -127,6 +127,8 @@ export default function App() {
   const [tasks, setTasks] = useState([]);
   const [notifs, setNotifs] = useState([]);
   const [collaborators, setCollaborators] = useState([]);
+  const [assignableCollaborators, setAssignableCollaborators] = useState([]);
+  const [showManagePeople, setShowManagePeople] = useState(false);
   const [view, setView] = useState("deck");
   const [deckScope, setDeckScope] = useState("all");
   const [queue, setQueue] = useState([]);
@@ -173,6 +175,7 @@ export default function App() {
         setTasks(t.tasks);
         setNotifs(n.notifications);
         setCollaborators(u.users);
+        setAssignableCollaborators(u.assignable || []);
       } catch (e) {
         if (e.unauthorized) setProfile(null);
         else console.error(e);
@@ -324,6 +327,16 @@ export default function App() {
     await api("/api/notifications/read", { method: "POST" }).catch(() => {});
   }
 
+  async function refreshCollaborators() {
+    try {
+      const u = await api("/api/users");
+      setCollaborators(u.users);
+      setAssignableCollaborators(u.assignable || []);
+    } catch {
+      // le prochain sondage (5s) rattrapera
+    }
+  }
+
   const requestNotifPermission = async () => {
     const result = await ensurePushSubscription();
     setNotifPermission(result);
@@ -358,6 +371,7 @@ export default function App() {
         onLogout={handleLogout}
         notifPermission={notifPermission}
         requestNotifPermission={requestNotifPermission}
+        onManagePeople={() => setShowManagePeople(true)}
       />
 
       <main className="pf-main">
@@ -412,17 +426,21 @@ export default function App() {
       )}
 
       {showAdd && (
-        <AddTaskModal collaborators={collaborators} onClose={() => setShowAdd(false)} onSubmit={addTask} />
+        <AddTaskModal collaborators={assignableCollaborators} onClose={() => setShowAdd(false)} onSubmit={addTask} />
       )}
 
       {editingTask && (
         <TaskEditModal
           task={editingTask}
-          collaborators={collaborators}
+          collaborators={assignableCollaborators}
           isAdmin={profile.isAdmin}
           onClose={() => setEditingTask(null)}
           onSubmit={(form) => editTask(editingTask.id, form)}
         />
+      )}
+
+      {showManagePeople && (
+        <ManagePeopleModal onClose={() => setShowManagePeople(false)} onChanged={refreshCollaborators} />
       )}
 
       {toast && <div className="pf-toast">{toast}</div>}
@@ -481,7 +499,7 @@ function LoginGate({ onLogin }) {
 /* ---------------------------------------------------------------------
    HEADER
 --------------------------------------------------------------------- */
-function Header({ profile, view, setView, unread, onLogout, notifPermission, requestNotifPermission }) {
+function Header({ profile, view, setView, unread, onLogout, notifPermission, requestNotifPermission, onManagePeople }) {
   return (
     <header className="pf-header">
       <div className="pf-header-top">
@@ -489,11 +507,18 @@ function Header({ profile, view, setView, unread, onLogout, notifPermission, req
           <div className="pf-eyebrow">DOCUMENT DE PILOTAGE</div>
           <div className="pf-title">Le tri des tâches</div>
         </div>
-        <button className="pf-who" onClick={onLogout} title="Se déconnecter">
-          <span className="pf-who-dot" />
-          {profile.name}
-          {profile.isAdmin && <span className="pf-badge pf-badge-admin">ADMIN</span>}
-        </button>
+        <div className="pf-header-actions">
+          {profile.isAdmin && (
+            <button className="pf-people-btn" onClick={onManagePeople} title="Gérer les personnes assignables">
+              👥
+            </button>
+          )}
+          <button className="pf-who" onClick={onLogout} title="Se déconnecter">
+            <span className="pf-who-dot" />
+            {profile.name}
+            {profile.isAdmin && <span className="pf-badge pf-badge-admin">ADMIN</span>}
+          </button>
+        </div>
       </div>
       <nav className="pf-tabs">
         <button className={"pf-tab" + (view === "deck" ? " active" : "")} onClick={() => setView("deck")}>
@@ -547,7 +572,7 @@ function DeckView({ queue, taskById, deckScope, setDeckScope, onSwipe, onSkip, o
         <div className="pf-legend">
           <span><i className="pf-dot" style={{ background: STATUTS.termine.color }} /> ← Terminé</span>
           <span><i className="pf-dot" style={{ background: STATUTS.en_cours.color }} /> ↑ En cours</span>
-          <span><i className="pf-dot" style={{ background: STATUTS.a_demarrer.color }} /> → À faire</span>
+          <span><i className="pf-dot" style={{ background: STATUTS.a_demarrer.color }} /> → À démarrer</span>
         </div>
       </div>
 
@@ -596,15 +621,24 @@ function DeckView({ queue, taskById, deckScope, setDeckScope, onSwipe, onSkip, o
             </p>
           )}
           <div className="pf-swipe-buttons">
-            <button className="pf-round pf-round-green" disabled={locked} onClick={() => onSwipe(visible[0].id, "left")} aria-label="Terminé">
-              ✕
-            </button>
-            <button className="pf-round pf-round-teal" disabled={locked} onClick={() => onSwipe(visible[0].id, "up")} aria-label="En cours">
-              ↑
-            </button>
-            <button className="pf-round pf-round-navy" disabled={locked} onClick={() => onSwipe(visible[0].id, "right")} aria-label="À faire">
-              →
-            </button>
+            <div className="pf-swipe-btn-wrap">
+              <button className="pf-round pf-round-green" disabled={locked} onClick={() => onSwipe(visible[0].id, "left")} aria-label="Terminé">
+                ✓
+              </button>
+              <span className="pf-swipe-btn-label">Terminé</span>
+            </div>
+            <div className="pf-swipe-btn-wrap">
+              <button className="pf-round pf-round-teal" disabled={locked} onClick={() => onSwipe(visible[0].id, "up")} aria-label="En cours">
+                ↑
+              </button>
+              <span className="pf-swipe-btn-label">En cours</span>
+            </div>
+            <div className="pf-swipe-btn-wrap">
+              <button className="pf-round pf-round-navy" disabled={locked} onClick={() => onSwipe(visible[0].id, "right")} aria-label="À démarrer">
+                →
+              </button>
+              <span className="pf-swipe-btn-label">À démarrer</span>
+            </div>
           </div>
         </>
       )}
@@ -702,8 +736,8 @@ function SwipeCard({ task, depth, interactive, locked, onSwipe, onBlockRequest, 
     >
       {interactive && !locked && (
         <>
-          <div className="pf-stamp pf-stamp-green" style={{ opacity: stampOpacity.left }}>TRAITÉ</div>
-          <div className="pf-stamp pf-stamp-navy" style={{ opacity: stampOpacity.right }}>À FAIRE</div>
+          <div className="pf-stamp pf-stamp-green" style={{ opacity: stampOpacity.left }}>TERMINÉ</div>
+          <div className="pf-stamp pf-stamp-navy" style={{ opacity: stampOpacity.right }}>À DÉMARRER</div>
           <div className="pf-stamp pf-stamp-teal pf-stamp-top" style={{ opacity: stampOpacity.up }}>EN COURS</div>
         </>
       )}
@@ -1313,6 +1347,134 @@ function BlockReasonModal({ onClose, onSubmit }) {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------
+   MANAGE PEOPLE (admin)
+--------------------------------------------------------------------- */
+function ManagePeopleModal({ onClose, onChanged }) {
+  const [people, setPeople] = useState(null);
+  const [newName, setNewName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const load = async () => {
+    try {
+      const { users } = await api("/api/admin/collaborators");
+      setPeople(users);
+    } catch (e) {
+      setError(e.message || "Erreur de chargement");
+    }
+  };
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const toggleAssignable = async (u) => {
+    setBusy(true);
+    setError("");
+    try {
+      await api("/api/admin/collaborators", { method: "PATCH", body: JSON.stringify({ id: u.id, assignable: !u.assignable }) });
+      await load();
+      onChanged?.();
+    } catch (e) {
+      setError(e.message || "Échec de la mise à jour");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const rename = async (u) => {
+    const name = (typeof window !== "undefined" ? window.prompt("Nouveau nom pour " + u.name, u.name) : null) || "";
+    if (!name.trim() || name.trim() === u.name) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api("/api/admin/collaborators", { method: "PATCH", body: JSON.stringify({ id: u.id, name: name.trim() }) });
+      await load();
+      onChanged?.();
+    } catch (e) {
+      setError(e.message || "Échec du renommage");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addPerson = async (e) => {
+    e.preventDefault();
+    const name = newName.trim();
+    if (!name) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api("/api/admin/collaborators", { method: "POST", body: JSON.stringify({ name }) });
+      setNewName("");
+      await load();
+      onChanged?.();
+    } catch (e) {
+      setError(e.message || "Échec de l'ajout");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="pf-modal-backdrop" onMouseDown={onClose}>
+      <div className="pf-modal" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="pf-modal-eyebrow">ADMINISTRATION</div>
+        <h2 className="pf-modal-title">Personnes assignables</h2>
+        <p className="pf-empty-sub" style={{ marginTop: -6, marginBottom: 14 }}>
+          Seules les personnes marquées « assignable » apparaissent dans le sélecteur d'assignation des tâches. Se
+          connecter à l'appli ne suffit pas à y figurer.
+        </p>
+        {error && <p style={{ color: "var(--red)", fontSize: 12.5, marginBottom: 10 }}>{error}</p>}
+        {!people ? (
+          <p className="pf-empty-sub">Chargement…</p>
+        ) : (
+          <div className="pf-people-list">
+            {people.map((u) => (
+              <div className="pf-people-row" key={u.id}>
+                <span className="pf-people-name">
+                  {u.name}
+                  {u.isAdmin && <span className="pf-badge pf-badge-admin">ADMIN</span>}
+                </span>
+                <span className="pf-people-actions">
+                  <button type="button" className="pf-quick-btn" disabled={busy} onClick={() => rename(u)}>
+                    ✎ Renommer
+                  </button>
+                  <button
+                    type="button"
+                    className={"pf-quick-btn" + (u.assignable ? " pf-quick-btn-on" : "")}
+                    disabled={busy}
+                    onClick={() => toggleAssignable(u)}
+                  >
+                    {u.assignable ? "✓ Assignable" : "Masquée"}
+                  </button>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        <form className="pf-comment-form" onSubmit={addPerson} style={{ marginTop: 14 }}>
+          <input
+            className="pf-input"
+            placeholder="Ajouter une personne…"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+          />
+          <button className="pf-btn pf-btn-primary pf-btn-sm" type="submit" disabled={busy || !newName.trim()}>
+            Ajouter
+          </button>
+        </form>
+        <div className="pf-modal-actions">
+          <button type="button" className="pf-btn pf-btn-outline" onClick={onClose}>
+            Fermer
+          </button>
+        </div>
       </div>
     </div>
   );

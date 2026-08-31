@@ -14,11 +14,13 @@ async function notify(actor, targets, taskId, message) {
   }
 }
 
+// Les deux appels ci-dessous ne se produisent que dans des branches déjà
+// réservées aux admins : assigner rend donc la personne assignable.
 async function upsertUsers(names) {
   const clean = [...new Set((names || []).map((n) => (n || "").trim()).filter(Boolean))];
   const users = [];
   for (const name of clean) {
-    users.push(await prisma.user.upsert({ where: { name }, update: {}, create: { name } }));
+    users.push(await prisma.user.upsert({ where: { name }, update: { assignable: true }, create: { name, assignable: true } }));
   }
   return users;
 }
@@ -141,7 +143,12 @@ export async function PATCH(req, { params }) {
 
   const message = `${actor.name} a mis à jour « ${task.titre} » — ${STATUT_LABELS[statut]}`;
   await notify(actor, targets, task.id, message);
-  await queueStatusNotification(prisma, task.id, statut, actor.id);
+  // "À démarrer" n'est pas un événement significatif pour le reste de
+  // l'équipe : on ne programme une notification élargie que pour un statut
+  // qui traduit un vrai avancement (en cours / terminé).
+  if (statut === "en_cours" || statut === "termine") {
+    await queueStatusNotification(prisma, task.id, statut, actor.id);
+  }
 
   return NextResponse.json({ ok: true });
 }

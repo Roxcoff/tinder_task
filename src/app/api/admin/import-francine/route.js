@@ -67,8 +67,8 @@ export async function GET(req) {
 
   const francine = await prisma.user.upsert({
     where: { name: "Francine" },
-    update: {},
-    create: { name: "Francine" },
+    update: { assignable: true },
+    create: { name: "Francine", assignable: true },
   });
 
   const updated = [];
